@@ -72,10 +72,19 @@ class ProductForm(forms.ModelForm):
         }
     
     def clean_name(self):
-        """Validate and clean product name"""
+        """Validate and clean product name - check for duplicates"""
         name = self.cleaned_data.get('name', '').strip()
         if len(name) < 3:
             raise ValidationError('Product name must be at least 3 characters long.')
+        
+        # Check for duplicate names (case-insensitive)
+        existing = Product.objects.filter(name__iexact=name)
+        if self.instance.pk:
+            existing = existing.exclude(pk=self.instance.pk)
+        
+        if existing.exists():
+            raise ValidationError(f'A product with the name "{name}" already exists. Please use a different name.')
+        
         return name
     
     def clean_price(self):
@@ -179,10 +188,19 @@ class CategoryForm(forms.ModelForm):
         }
     
     def clean_name(self):
-        """Validate and clean category name"""
+        """Validate and clean category name - check for duplicates"""
         name = self.cleaned_data.get('name', '').strip()
         if len(name) < 2:
             raise ValidationError('Category name must be at least 2 characters long.')
+        
+        # Check for duplicate names (case-insensitive)
+        existing = Category.objects.filter(name__iexact=name)
+        if self.instance.pk:
+            existing = existing.exclude(pk=self.instance.pk)
+        
+        if existing.exists():
+            raise ValidationError(f'A category with the name "{name}" already exists. Please use a different name.')
+        
         return name
     
     def clean(self):

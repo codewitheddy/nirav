@@ -13,3 +13,12 @@ env/
 staticfiles/
 *.md
 .kiro/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Keep important documentation
+!README.md
+!DOCKER_README.md
+!BACK4APP_DEPLOYMENT.md

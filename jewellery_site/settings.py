@@ -15,6 +15,14 @@ import os
 import dj_database_url
 from decouple import config, Csv
 
+# Optional Sentry SDK for error tracking
+try:
+    import sentry_sdk
+    from sentry_sdk.integrations.django import DjangoIntegration
+    SENTRY_AVAILABLE = True
+except ImportError:
+    SENTRY_AVAILABLE = False
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -164,10 +172,9 @@ CACHES = {
     }
 }
 
-# Session configuration - use cache for sessions
-SESSION_ENGINE = 'django.contrib.sessions.backends.cached_db'
-SESSION_CACHE_ALIAS = 'default'
-SESSION_COOKIE_AGE = 7200  # 2 hours
+# Session configuration - use database for sessions (more reliable)
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+SESSION_COOKIE_AGE = 86400  # 24 hours
 SESSION_SAVE_EVERY_REQUEST = True  # Reset timeout on activity
 SESSION_COOKIE_HTTPONLY = True  # Prevent JavaScript access
 SESSION_COOKIE_SAMESITE = 'Lax'  # CSRF protection
@@ -217,5 +224,40 @@ if DEBUG:
         'formatter': 'verbose',
     }
     LOGGING['loggers']['myadmin']['handlers'].append('file')
+
+# Sentry Error Tracking (optional)
+SENTRY_DSN = config('SENTRY_DSN', default='')
+
+if SENTRY_DSN and SENTRY_AVAILABLE:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[
+            DjangoIntegration(
+                transaction_style='url',
+                middleware_spans=True,
+                signals_spans=True,
+                cache_spans=True,
+            ),
+        ],
+        # Set traces_sample_rate to 1.0 to capture 100% of transactions for performance monitoring.
+        # Adjust this value in production to reduce overhead
+        traces_sample_rate=0.1 if not DEBUG else 1.0,
+        
+        # Set profiles_sample_rate to 1.0 to profile 100% of sampled transactions.
+        # Adjust this value in production
+        profiles_sample_rate=0.1 if not DEBUG else 1.0,
+        
+        # Send default PII (Personally Identifiable Information) like user IP and username
+        send_default_pii=True,
+        
+        # Environment
+        environment='production' if not DEBUG else 'development',
+        
+        # Release tracking
+        release=config('HEROKU_SLUG_COMMIT', default='unknown'),
+        
+        # Before send hook to filter sensitive data
+        before_send=lambda event, hint: event if not DEBUG else None,  # Don't send in development
+    )
 
 

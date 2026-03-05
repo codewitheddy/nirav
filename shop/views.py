@@ -232,3 +232,20 @@ def checkout(request):
         })
     
     return JsonResponse({'success': False})
+
+
+
+def clear_cart(request):
+    """Clear cart - for testing/debugging only"""
+    request.session['cart'] = {}
+    request.session.modified = True
+    
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Cart cleared for session: {request.session.session_key}")
+    
+    return JsonResponse({
+        'success': True,
+        'message': 'Cart cleared',
+        'cart_count': 0
+    })
