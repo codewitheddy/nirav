@@ -47,6 +47,39 @@ def check_env_example():
         print("✅ .env.example has all required variables")
         return True
 
+def check_requirements():
+    """Check if requirements.txt has valid Django version"""
+    if not Path('requirements.txt').exists():
+        print("❌ requirements.txt not found")
+        return False
+    
+    with open('requirements.txt', 'r') as f:
+        content = f.read()
+    
+    # Check for Django
+    if 'Django==' not in content:
+        print("❌ Django not found in requirements.txt")
+        return False
+    
+    # Check for invalid future versions
+    invalid_versions = ['Django==6.', 'Django==7.', 'gunicorn==25.', 'pillow==12.']
+    for invalid in invalid_versions:
+        if invalid in content:
+            print(f"❌ Invalid future version found: {invalid}")
+            print("   Run: Update requirements.txt with stable versions")
+            return False
+    
+    # Check for valid Django 5.x
+    if 'Django==5.' in content:
+        print("✅ requirements.txt has valid Django version (5.x)")
+        return True
+    elif 'Django==4.' in content:
+        print("✅ requirements.txt has valid Django version (4.x)")
+        return True
+    else:
+        print("⚠️  Django version may need verification")
+        return True
+
 def main():
     print("=" * 60)
     print("Docker Deployment Setup Validation")
@@ -82,7 +115,7 @@ def main():
     # Configuration
     print("Configuration:")
     checks.append(check_env_example())
-    checks.append(check_file('requirements.txt', 'Requirements'))
+    checks.append(check_requirements())
     print()
     
     # Django files
@@ -111,6 +144,9 @@ def main():
         print("1. Copy .env.example to .env and configure it")
         print("2. Test locally: ./docker-start.sh (or docker-start.bat on Windows)")
         print("3. Follow BACK4APP_DEPLOYMENT.md for deployment")
+        print()
+        print("Note: Requirements.txt has been updated with stable versions.")
+        print("See DEPLOYMENT_FIX.md for details.")
         return 0
     else:
         print("❌ Some checks failed. Please review the errors above.")
