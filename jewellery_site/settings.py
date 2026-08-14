@@ -266,7 +266,7 @@ if SENTRY_DSN and SENTRY_AVAILABLE:
         environment='production' if not DEBUG else 'development',
         
         # Release tracking
-        release=config('HEROKU_SLUG_COMMIT', default='unknown'),
+        release='production',
         
         # Before send hook to filter sensitive data
         before_send=lambda event, hint: event if not DEBUG else None,  # Don't send in development
