@@ -1,9 +1,9 @@
 from django import forms
 from django.core.exceptions import ValidationError
 from django.utils.text import slugify
-from .models import Product, Category, Order
+from django.forms import inlineformset_factory
+from .models import Product, Category, Order, ProductVariant, Promotion, HeroBanner
 from PIL import Image
-from io import BytesIO
 
 
 class ProductForm(forms.ModelForm):
@@ -13,7 +13,8 @@ class ProductForm(forms.ModelForm):
         model = Product
         fields = [
             'name', 'category', 'short_description', 'description',
-            'price', 'image_url', 'image_base64', 'image', 'is_available'
+            'price', 'image_url', 'image_base64', 'image',
+            'is_available', 'is_featured', 'stock'
         ]
         widgets = {
             'name': forms.TextInput(attrs={
@@ -51,6 +52,10 @@ class ProductForm(forms.ModelForm):
                 'accept': 'image/jpeg,image/png,image/webp'
             }),
             'is_available': forms.CheckboxInput(attrs={'class': 'form-checkbox'}),
+            'is_featured':  forms.CheckboxInput(attrs={'class': 'form-checkbox'}),
+            'stock': forms.NumberInput(attrs={
+                'class': 'form-input', 'min': '0', 'placeholder': 'Leave blank for unlimited'
+            }),
         }
         labels = {
             'name': 'Product Name',
@@ -62,6 +67,7 @@ class ProductForm(forms.ModelForm):
             'image_base64': 'Base64 Image (Optional)',
             'image': 'Upload Image (Optional)',
             'is_available': 'Available for Purchase',
+            'is_featured':  'Featured Product',
         }
         help_texts = {
             'short_description': 'This appears in product cards (max 150 characters)',
@@ -125,14 +131,16 @@ class ProductForm(forms.ModelForm):
                         'Invalid image format. Supported formats: JPEG, PNG, WebP.'
                     )
                 
-                # Validate image integrity
+                # Validate image integrity - just open the header, no .load() or .verify()
+                # which would exhaust the file pointer and interfere with Django's validator
                 try:
-                    img = Image.open(image)
-                    img.verify()
-                    # Reset file pointer after verify
                     image.seek(0)
-                except Exception:
-                    raise ValidationError('Invalid or corrupted image file.')
+                    img = Image.open(image)
+                    # Reading just the header is enough to confirm it's a valid image
+                    img.format  # forces header parse without consuming the stream
+                    image.seek(0)
+                except Exception as e:
+                    raise ValidationError(f'Invalid or corrupted image file: {str(e)}')
             # If no content_type, it's an existing image file - no validation needed
         
         return image
@@ -282,8 +290,259 @@ class OrderStatusForm(forms.ModelForm):
 
 
 
+class ProductVariantForm(forms.ModelForm):
+    """Form for a single product variant (size / color / price / image)."""
+
+    class Meta:
+        model = ProductVariant
+        fields = ['size', 'color', 'price', 'stock', 'image_url', 'image', 'is_available']
+        widgets = {
+            'size': forms.TextInput(attrs={
+                'class': 'form-input',
+                'placeholder': 'e.g. S, M, L or 6, 7, 8'
+            }),
+            'color': forms.TextInput(attrs={
+                'class': 'form-input',
+                'placeholder': 'e.g. Gold, Silver, Rose Gold'
+            }),
+            'price': forms.NumberInput(attrs={
+                'class': 'form-input',
+                'step': '0.01',
+                'min': '0',
+                'placeholder': '0.00'
+            }),
+            'stock': forms.NumberInput(attrs={
+                'class': 'form-input',
+                'min': '0',
+                'placeholder': 'Leave blank for unlimited'
+            }),
+            'image_url': forms.URLInput(attrs={
+                'class': 'form-input',
+                'placeholder': 'https://example.com/image.jpg (optional)'
+            }),
+            'image': forms.FileInput(attrs={
+                'class': 'form-file',
+                'accept': 'image/jpeg,image/png,image/webp'
+            }),
+            'is_available': forms.CheckboxInput(attrs={'class': 'form-checkbox'}),
+        }
+
+    def clean_price(self):
+        price = self.cleaned_data.get('price')
+        if price is not None and price < 0:
+            raise ValidationError('Price must be non-negative.')
+        return price
+
+    def clean_image(self):
+        """Validate uploaded image file - allow empty/None for optional image"""
+        image = self.cleaned_data.get('image')
+        
+        if image:
+            # Check if this is a new uploaded file (has content_type) or existing image
+            if hasattr(image, 'content_type'):
+                # This is a newly uploaded file - validate it
+                # Check file size (max 5MB)
+                if image.size > 5 * 1024 * 1024:
+                    raise ValidationError('Image file size cannot exceed 5MB.')
+                
+                # Check file type
+                valid_types = ['image/jpeg', 'image/png', 'image/webp']
+                if image.content_type not in valid_types:
+                    raise ValidationError(
+                        'Invalid image format. Supported formats: JPEG, PNG, WebP.'
+                    )
+                
+                # Validate image integrity - just open the header, no .load() or .verify()
+                # which would exhaust the file pointer and interfere with Django's validator
+                try:
+                    image.seek(0)
+                    img = Image.open(image)
+                    img.format  # forces header parse without consuming the stream
+                    image.seek(0)
+                except Exception as e:
+                    raise ValidationError(f'Invalid or corrupted image file: {str(e)}')
+            # If no content_type, it's an existing image file - no validation needed
+        
+        return image
+
+
+# Inline formset: manage variants directly on the product add/edit page
+ProductVariantFormSet = inlineformset_factory(
+    Product,
+    ProductVariant,
+    form=ProductVariantForm,
+    extra=0,        # No blank rows — variants are managed via AJAX on the edit page
+    can_delete=True,
+)
+
+
+class HeroBannerForm(forms.ModelForm):
+    class Meta:
+        model = HeroBanner
+        fields = [
+            'eyebrow', 'heading', 'subtitle',
+            'pill_1', 'pill_1_icon', 'pill_1_icon_custom',
+            'pill_2', 'pill_2_icon', 'pill_2_icon_custom',
+            'pill_3', 'pill_3_icon', 'pill_3_icon_custom',
+            'cta_primary_text', 'cta_primary_url',
+            'cta_secondary_text', 'cta_secondary_url',
+            'bg_color', 'bg_image_url', 'bg_image',
+            'image_url', 'image', 'hide_side_image',
+            'color_scheme',
+            'eyebrow_color', 'heading_color', 'subtitle_color',
+            'pill_text_color', 'pill_icon_color',
+            'btn_primary_bg', 'btn_primary_text_color',
+            'btn_secondary_bg', 'btn_secondary_text_color',
+            'is_active', 'order',
+        ]
+
+        _color_widget = lambda placeholder='#000000': forms.TextInput(attrs={
+            'class': 'form-input', 'type': 'color',
+            'style': 'height:44px;padding:4px 8px;cursor:pointer;width:100%;',
+        })
+
+        widgets = {
+            'eyebrow': forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'e.g. NEW COLLECTION'}),
+            'heading': forms.Textarea(attrs={'class': 'form-textarea', 'rows': 3,
+                                             'placeholder': 'Main heading. Use \\n for a line break.'}),
+            'subtitle': forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'Short tagline'}),
+            'pill_1': forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'e.g. Hypoallergenic'}),
+            'pill_1_icon': forms.Select(attrs={'class': 'form-select pill-icon-select', 'data-pill': '1'}),
+            'pill_1_icon_custom': forms.TextInput(attrs={
+                'class': 'form-input pill-icon-custom', 'data-pill': '1',
+                'placeholder': 'e.g. <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+            }),
+            'pill_2': forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'e.g. Water Resistant'}),
+            'pill_2_icon': forms.Select(attrs={'class': 'form-select pill-icon-select', 'data-pill': '2'}),
+            'pill_2_icon_custom': forms.TextInput(attrs={
+                'class': 'form-input pill-icon-custom', 'data-pill': '2',
+                'placeholder': 'e.g. <circle cx="12" cy="12" r="10"/>',
+            }),
+            'pill_3': forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'e.g. Tarnish Free'}),
+            'pill_3_icon': forms.Select(attrs={'class': 'form-select pill-icon-select', 'data-pill': '3'}),
+            'pill_3_icon_custom': forms.TextInput(attrs={
+                'class': 'form-input pill-icon-custom', 'data-pill': '3',
+                'placeholder': 'e.g. <polyline points="20 6 9 17 4 12"/>',
+            }),
+            'cta_primary_text':   forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'Explore Collection'}),
+            'cta_primary_url':    forms.TextInput(attrs={'class': 'form-input', 'placeholder': '#products'}),
+            'cta_secondary_text': forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'Contact Us'}),
+            'cta_secondary_url':  forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'https://wa.me/...'}),
+            'bg_color': forms.TextInput(attrs={'class': 'form-input', 'type': 'color',
+                                               'style': 'height:44px;padding:4px 8px;cursor:pointer;'}),
+            'bg_image_url': forms.URLInput(attrs={'class': 'form-input',
+                                                  'placeholder': 'https://... full-hero background image (overrides colour)'}),
+            'bg_image': forms.FileInput(attrs={'class': 'form-file', 'accept': 'image/*'}),
+            'image_url': forms.URLInput(attrs={'class': 'form-input', 'placeholder': 'https://... right-side image'}),
+            'image': forms.FileInput(attrs={'class': 'form-file', 'accept': 'image/*'}),
+            'hide_side_image': forms.CheckboxInput(attrs={'class': 'form-checkbox'}),
+            'color_scheme': forms.Select(attrs={'class': 'form-select'}),
+            'eyebrow_color': forms.TextInput(attrs={'class': 'form-input', 'type': 'color',
+                                                    'style': 'height:44px;padding:4px 8px;cursor:pointer;width:100%;'}),
+            'heading_color': forms.TextInput(attrs={'class': 'form-input', 'type': 'color',
+                                                    'style': 'height:44px;padding:4px 8px;cursor:pointer;width:100%;'}),
+            'subtitle_color': forms.TextInput(attrs={'class': 'form-input', 'type': 'color',
+                                                     'style': 'height:44px;padding:4px 8px;cursor:pointer;width:100%;'}),
+            'pill_text_color': forms.TextInput(attrs={'class': 'form-input', 'type': 'color',
+                                                      'style': 'height:44px;padding:4px 8px;cursor:pointer;width:100%;'}),
+            'pill_icon_color': forms.TextInput(attrs={'class': 'form-input', 'type': 'color',
+                                                      'style': 'height:44px;padding:4px 8px;cursor:pointer;width:100%;'}),
+            'btn_primary_bg': forms.TextInput(attrs={
+                'class': 'form-input color-or-transparent',
+                'placeholder': '#1a1a1a or transparent',
+                'style': 'width:100%;',
+                'data-color-companion': 'picker_btn_primary_bg',
+            }),
+            'btn_primary_text_color': forms.TextInput(attrs={'class': 'form-input', 'type': 'color',
+                                                             'style': 'height:44px;padding:4px 8px;cursor:pointer;width:100%;'}),
+            'btn_secondary_bg': forms.TextInput(attrs={
+                'class': 'form-input color-or-transparent',
+                'placeholder': 'transparent or #hex',
+                'style': 'width:100%;',
+                'data-color-companion': 'picker_btn_secondary_bg',
+            }),
+            'btn_secondary_text_color': forms.TextInput(attrs={'class': 'form-input', 'type': 'color',
+                                                               'style': 'height:44px;padding:4px 8px;cursor:pointer;width:100%;'}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-checkbox'}),
+            'order': forms.NumberInput(attrs={'class': 'form-input', 'min': '0'}),
+        }
+
+
+class PromotionForm(forms.ModelForm):
+    """Form for creating and editing promotions."""
+
+    products = forms.ModelMultipleChoiceField(
+        queryset=Product.objects.filter(is_available=True).order_by('name'),
+        required=False,
+        widget=forms.CheckboxSelectMultiple(attrs={'class': 'product-checkbox-list'}),
+        label='Apply to Products',
+        help_text='Only used when scope is "Specific Products"'
+    )
+
+    variants = forms.ModelMultipleChoiceField(
+        queryset=ProductVariant.objects.filter(is_available=True).select_related('product').order_by('product__name', 'size', 'color'),
+        required=False,
+        widget=forms.CheckboxSelectMultiple(attrs={'class': 'product-checkbox-list'}),
+        label='Apply to Variants',
+        help_text='Only used when scope is "Specific Variants"'
+    )
+
+    class Meta:
+        model = Promotion
+        fields = [
+            'name', 'discount_type', 'discount_value', 'scope',
+            'products', 'variants', 'category', 'min_quantity',
+            'starts_at', 'ends_at', 'is_active', 'also_discount_base',
+        ]
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'e.g. Summer Sale 20%'}),
+            'discount_type': forms.Select(attrs={'class': 'form-select'}),
+            'discount_value': forms.NumberInput(attrs={'class': 'form-input', 'step': '0.01', 'min': '0', 'placeholder': '0.00'}),
+            'scope': forms.Select(attrs={'class': 'form-select', 'id': 'id_scope'}),
+            'category': forms.Select(attrs={'class': 'form-select'}),
+            'min_quantity': forms.NumberInput(attrs={'class': 'form-input', 'min': '1', 'placeholder': '1'}),
+            'starts_at': forms.DateTimeInput(attrs={'class': 'form-input', 'type': 'datetime-local'}, format='%Y-%m-%dT%H:%M'),
+            'ends_at': forms.DateTimeInput(attrs={'class': 'form-input', 'type': 'datetime-local'}, format='%Y-%m-%dT%H:%M'),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-checkbox'}),
+            'also_discount_base': forms.CheckboxInput(attrs={'class': 'form-checkbox'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['category'].queryset = Category.objects.all().order_by('name')
+        self.fields['category'].empty_label = '— Select Category —'
+        self.fields['category'].required = False
+        # Pre-format datetime fields for the datetime-local input
+        if self.instance and self.instance.pk:
+            if self.instance.starts_at:
+                self.initial['starts_at'] = self.instance.starts_at.strftime('%Y-%m-%dT%H:%M')
+            if self.instance.ends_at:
+                self.initial['ends_at'] = self.instance.ends_at.strftime('%Y-%m-%dT%H:%M')
+
+    def clean_discount_value(self):
+        val = self.cleaned_data.get('discount_value')
+        if val is None or val <= 0:
+            raise ValidationError('Discount value must be greater than 0.')
+        dtype = self.cleaned_data.get('discount_type')
+        if dtype == Promotion.TYPE_PERCENTAGE and val > 100:
+            raise ValidationError('Percentage discount cannot exceed 100%.')
+        return val
+
+    def clean(self):
+        cleaned = super().clean()
+        scope = cleaned.get('scope')
+        if scope == Promotion.SCOPE_PRODUCTS and not cleaned.get('products'):
+            self.add_error('products', 'Select at least one product for "Specific Products" scope.')
+        if scope == Promotion.SCOPE_CATEGORY and not cleaned.get('category'):
+            self.add_error('category', 'Select a category for "Specific Category" scope.')
+        starts = cleaned.get('starts_at')
+        ends = cleaned.get('ends_at')
+        if starts and ends and ends <= starts:
+            self.add_error('ends_at', 'End date must be after start date.')
+        return cleaned
+
+
 class UserCreateForm(forms.Form):
-    """Form for creating new staff users"""
     
     username = forms.CharField(
         max_length=150,

@@ -1,0 +1,63 @@
+{% load static %}
+{% load image_tags %}
+
+{% for product in products %}
+<div class="product-card" data-category="{{ product.category.slug }}"
+     onclick="showProductModal({{ product.id }}, '{{ product.name|escapejs }}', '{{ product.description|escapejs }}', '{{ product.price }}', '{% if product.get_image_url %}{{ product.get_image_url }}{% endif %}', {{ product.variants_json }}, {{ product.sale_json }})">
+
+    <div class="product-image">
+        {% if product.get_image_url %}
+            {% optimized_img product.get_image_url product.name css_class="" lazy=True %}
+        {% else %}
+            <img src="{% static 'images/placeholder.svg' %}" alt="{{ product.name }}" loading="lazy">
+        {% endif %}
+
+        {% if product.discount_percent %}
+        <div class="sale-badge">-{{ product.discount_percent }}%</div>
+        {% elif product.has_variant_on_sale %}
+        <div class="sale-badge">Sale</div>
+        {% endif %}
+        {% if not product.is_in_stock %}
+        <div class="sale-badge" style="background:#555;right:10px;left:auto;">Sold Out</div>
+        {% elif product.low_stock %}
+        <div class="sale-badge" style="background:#e67e22;right:10px;left:auto;">Only {{ product.total_stock }} left</div>
+        {% endif %}
+    </div>
+
+    <div class="product-info">
+        <div class="product-name">{{ product.name }}</div>
+        <div class="product-desc">{{ product.short_description }}</div>
+        <div class="product-footer">
+            <div class="product-price-block">
+                {% if product.sale_price %}
+                    <span class="product-price-original">Ksh {{ product.price|thousand_separator }}</span>
+                    <span class="product-price sale-price">Ksh {{ product.sale_price|thousand_separator }}</span>
+                {% elif product.variants.all %}
+                    <span class="product-price">Ksh {{ product.min_variant_price|thousand_separator }}</span>
+                {% else %}
+                    <span class="product-price">Ksh {{ product.price|thousand_separator }}</span>
+                {% endif %}
+            </div>
+
+            {% if not product.variants.all %}
+            <button class="btn-add-cart{% if product.total_stock == 0 %} sold-out{% endif %}" data-product-id="{{ product.id }}" {% if product.total_stock == 0 %}disabled{% else %}onclick="event.stopPropagation(); addToCart({{ product.id }}, null, this)"{% endif %}>
+                <span class="btn-icon">+</span>
+                <span class="btn-text">{% if product.total_stock == 0 %}Sold Out{% else %}Add{% endif %}</span>
+            </button>
+            <div class="quantity-selector" data-product-id="{{ product.id }}" data-cart-key="{{ product.id }}">
+                <button class="qty-control-btn" onclick="event.stopPropagation(); adjustQuantity('{{ product.id }}', 'decrease', this.parentElement)">−</button>
+                <span class="qty-display">1</span>
+                <button class="qty-control-btn" onclick="event.stopPropagation(); adjustQuantity('{{ product.id }}', 'increase', this.parentElement)">+</button>
+            </div>
+            {% else %}
+            <button class="btn-add-cart btn-select-variant{% if product.total_stock == 0 %} sold-out{% endif %}" data-product-id="{{ product.id }}" {% if product.total_stock == 0 %}disabled{% else %}onclick="event.stopPropagation(); openVariantPicker({{ product.id }}, '{{ product.name|escapejs }}', '{{ product.description|escapejs }}', '{{ product.price }}', '{% if product.get_image_url %}{{ product.get_image_url }}{% endif %}', {{ product.variants_json }}, {{ product.sale_json }})"{% endif %}>
+                <span class="btn-icon">+</span>
+                <span class="btn-text">{% if product.total_stock == 0 %}Sold Out{% else %}Select{% endif %}</span>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% empty %}
+<p style="text-align: center; grid-column: 1/-1; color: #999;">No products available in this category.</p>
+{% endfor %}

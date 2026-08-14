@@ -5,163 +5,663 @@
 
 {% block breadcrumbs %}
 <div class="breadcrumbs">
-    <a href="{% url 'myadmin:dashboard' %}">Dashboard</a>
-    <span class="breadcrumbs-separator">›</span>
-    <a href="{% url 'myadmin:product_list' %}">Products</a>
-    <span class="breadcrumbs-separator">›</span>
-    <span>Edit: {{ object.name }}</span>
+  <a href="{% url 'myadmin:dashboard' %}">Dashboard</a>
+  <span class="breadcrumbs-separator">›</span>
+  <a href="{% url 'myadmin:product_list' %}">Products</a>
+  <span class="breadcrumbs-separator">›</span>
+  <span>Edit: {{ object.name }}</span>
 </div>
 {% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1 class="page-title">Edit Product</h1>
+  <h1 class="page-title">Edit Product</h1>
 </div>
 
+<!-- ── Product Details Form ── -->
 <div class="card">
-    <form method="post" enctype="multipart/form-data" action="{% url 'myadmin:product_edit' object.pk %}">
-        {% csrf_token %}
-        
-        <div class="form-group">
-            <label for="{{ form.name.id_for_label }}" class="form-label form-label-required">{{ form.name.label }}</label>
-            {{ form.name }}
-            {% if form.name.errors %}
-            <div class="form-error">{{ form.name.errors.0 }}</div>
-            {% endif %}
-            {% if form.name.help_text %}
-            <div class="form-help">{{ form.name.help_text }}</div>
-            {% endif %}
+  <form method="post" enctype="multipart/form-data" id="productForm"
+        action="{% url 'myadmin:product_edit' object.pk %}">
+    {% csrf_token %}
+    {{ variant_formset.management_form }}
+
+    <!-- ── Error summary ── -->
+    {% if form.errors %}
+    <div id="formErrorSummary" style="background:#fff5f5;border:1px solid #f5c6cb;border-radius:8px;padding:14px 16px;margin-bottom:24px;">
+      <div style="font-weight:700;color:#c0392b;margin-bottom:8px;display:flex;align-items:center;gap:8px;">
+        <svg width="16" height="16" fill="none" stroke="#c0392b" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Please fix the following before saving:
+      </div>
+      <ul style="margin:0;padding-left:18px;color:#c0392b;font-size:0.88rem;line-height:1.8;">
+        {% for field in form %}
+          {% for error in field.errors %}
+          <li><strong>{{ field.label }}:</strong> {{ error }}</li>
+          {% endfor %}
+        {% endfor %}
+        {% for error in form.non_field_errors %}
+        <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <div class="form-group">
+      <label for="{{ form.name.id_for_label }}" class="form-label form-label-required">{{ form.name.label }}</label>
+      {{ form.name }}
+      {% if form.name.errors %}<div class="form-error">{{ form.name.errors.0 }}</div>{% endif %}
+    </div>
+
+    <div class="form-group">
+      <label for="{{ form.category.id_for_label }}" class="form-label form-label-required">{{ form.category.label }}</label>
+      {{ form.category }}
+      {% if form.category.errors %}<div class="form-error">{{ form.category.errors.0 }}</div>{% endif %}
+    </div>
+
+    <div class="form-group">
+      <label for="{{ form.short_description.id_for_label }}" class="form-label form-label-required">{{ form.short_description.label }}</label>
+      {{ form.short_description }}
+      {% if form.short_description.errors %}<div class="form-error">{{ form.short_description.errors.0 }}</div>{% endif %}
+      {% if form.short_description.help_text %}<div class="form-help">{{ form.short_description.help_text }}</div>{% endif %}
+    </div>
+
+    <div class="form-group">
+      <label for="{{ form.description.id_for_label }}" class="form-label form-label-required">{{ form.description.label }}</label>
+      {{ form.description }}
+      {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+    </div>
+
+    <div class="form-group">
+      <label for="{{ form.price.id_for_label }}" class="form-label form-label-required">{{ form.price.label }}</label>
+      {{ form.price }}
+      <div class="form-help">Base / display price. Each variant can override this.</div>
+      {% if form.price.errors %}<div class="form-error">{{ form.price.errors.0 }}</div>{% endif %}
+    </div>
+
+    <!-- ── Images ── -->
+    <div class="card" style="background:var(--gray-light);padding:20px;margin-bottom:20px;">
+      <h3 style="margin-bottom:16px;font-size:18px;">Default Product Image</h3>
+
+      <!-- Current image preview — always shown if one exists -->
+      <div id="currentImageWrap" style="margin-bottom:16px;{% if not object.get_image_url %}display:none;{% endif %}">
+        <label class="form-label">Current Image</label>
+        <img id="currentImagePreview"
+             src="{% if object.get_image_url %}{{ object.get_image_url }}{% endif %}"
+             alt="{{ object.name }}"
+             style="max-width:200px;max-height:200px;border-radius:8px;display:block;margin-top:6px;object-fit:cover;">
+      </div>
+
+      <div class="form-group">
+        <label for="{{ form.image_url.id_for_label }}" class="form-label">Image URL</label>
+        {{ form.image_url }}
+        {% if form.image_url.errors %}<div class="form-error">{{ form.image_url.errors.0 }}</div>{% endif %}
+      </div>
+      <div class="form-group">
+        <label for="{{ form.image.id_for_label }}" class="form-label">Upload Image (Optional)</label>
+        <input type="file" name="image" id="{{ form.image.id_for_label }}"
+               accept="image/jpeg,image/png,image/webp" class="form-file">
+        {% if form.image.errors %}<div class="form-error">{{ form.image.errors.0 }}</div>{% endif %}
+        <!-- New file preview — shown when a new file is selected -->
+        <div id="imagePreview" style="margin-top:12px;display:none;">
+          <label class="form-label" style="margin-bottom:6px;">New Image Preview</label>
+          <img id="previewImg" src="" alt="Preview"
+               style="max-width:200px;max-height:200px;border-radius:8px;display:block;object-fit:cover;">
         </div>
-        
-        <div class="form-group">
-            <label for="{{ form.category.id_for_label }}" class="form-label form-label-required">{{ form.category.label }}</label>
-            {{ form.category }}
-            {% if form.category.errors %}
-            <div class="form-error">{{ form.category.errors.0 }}</div>
-            {% endif %}
-            {% if form.category.help_text %}
-            <div class="form-help">{{ form.category.help_text }}</div>
-            {% endif %}
-        </div>
-        
-        <div class="form-group">
-            <label for="{{ form.short_description.id_for_label }}" class="form-label form-label-required">{{ form.short_description.label }}</label>
-            {{ form.short_description }}
-            {% if form.short_description.errors %}
-            <div class="form-error">{{ form.short_description.errors.0 }}</div>
-            {% endif %}
-            {% if form.short_description.help_text %}
-            <div class="form-help">{{ form.short_description.help_text }}</div>
-            {% endif %}
-        </div>
-        
-        <div class="form-group">
-            <label for="{{ form.description.id_for_label }}" class="form-label form-label-required">{{ form.description.label }}</label>
-            {{ form.description }}
-            {% if form.description.errors %}
-            <div class="form-error">{{ form.description.errors.0 }}</div>
-            {% endif %}
-            {% if form.description.help_text %}
-            <div class="form-help">{{ form.description.help_text }}</div>
-            {% endif %}
-        </div>
-        
-        <div class="form-group">
-            <label for="{{ form.price.id_for_label }}" class="form-label form-label-required">{{ form.price.label }}</label>
-            {{ form.price }}
-            {% if form.price.errors %}
-            <div class="form-error">{{ form.price.errors.0 }}</div>
-            {% endif %}
-            {% if form.price.help_text %}
-            <div class="form-help">{{ form.price.help_text }}</div>
-            {% endif %}
-        </div>
-        
-        <div class="card" style="background: var(--gray-light); padding: 20px; margin-bottom: 20px;">
-            <h3 style="margin-bottom: 16px; font-size: 18px;">Product Image</h3>
-            
-            {% if object.get_image_url %}
-            <div style="margin-bottom: 16px;">
-                <label class="form-label">Current Image:</label>
-                <div>
-                    <img src="{{ object.get_image_url }}" alt="{{ object.name }}" style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 2px solid var(--gray-medium);">
-                </div>
-            </div>
-            {% endif %}
-            
-            <div class="form-group">
-                <label for="{{ form.image_url.id_for_label }}" class="form-label">{{ form.image_url.label }}</label>
-                {{ form.image_url }}
-                {% if form.image_url.errors %}
-                <div class="form-error">{{ form.image_url.errors.0 }}</div>
-                {% endif %}
-                {% if form.image_url.help_text %}
-                <div class="form-help">{{ form.image_url.help_text }}</div>
-                {% endif %}
-            </div>
-            
-            <div class="form-group">
-                <label for="{{ form.image.id_for_label }}" class="form-label">{{ form.image.label }}</label>
-                {{ form.image }}
-                {% if form.image.errors %}
-                <div class="form-error">{{ form.image.errors.0 }}</div>
-                {% endif %}
-                {% if form.image.help_text %}
-                <div class="form-help">{{ form.image.help_text }}</div>
-                {% endif %}
-                <div id="imagePreview" style="margin-top: 12px; display: none;">
-                    <label class="form-label">New Image Preview:</label>
-                    <img id="previewImg" src="" alt="Preview" style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 2px solid var(--gray-medium);">
-                </div>
-            </div>
-            
-            <div class="form-group" style="margin-bottom: 0;">
-                <label for="{{ form.image_base64.id_for_label }}" class="form-label">{{ form.image_base64.label }}</label>
-                {{ form.image_base64 }}
-                {% if form.image_base64.errors %}
-                <div class="form-error">{{ form.image_base64.errors.0 }}</div>
-                {% endif %}
-                {% if form.image_base64.help_text %}
-                <div class="form-help">{{ form.image_base64.help_text }}</div>
-                {% endif %}
-            </div>
-        </div>
-        
-        <div class="form-group">
-            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                {{ form.is_available }}
-                <span class="form-label" style="margin-bottom: 0;">{{ form.is_available.label }}</span>
-            </label>
-            {% if form.is_available.errors %}
-            <div class="form-error">{{ form.is_available.errors.0 }}</div>
-            {% endif %}
-        </div>
-        
-        {% if form.non_field_errors %}
-        <div class="form-error mb-2">{{ form.non_field_errors.0 }}</div>
-        {% endif %}
-        
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Update Product</button>
-            <a href="{% url 'myadmin:product_list' %}" class="btn btn-secondary">Cancel</a>
-        </div>
-    </form>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label for="{{ form.image_base64.id_for_label }}" class="form-label">Base64 Image (optional)</label>
+        {{ form.image_base64 }}
+      </div>
+    </div>
+
+    <!-- ── Flags ── -->
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        {{ form.is_available }}
+        <span class="form-label" style="margin-bottom:0;">{{ form.is_available.label }}</span>
+      </label>
+    </div>
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:12px 14px;background:#fffbf0;border:1px solid #f0e0a0;border-radius:8px;">
+        {{ form.is_featured }}
+        <span>
+          <span class="form-label" style="margin-bottom:0;">⭐ Featured Product</span>
+          <span class="form-help" style="display:block;margin-top:2px;">Featured products are highlighted in the storefront.</span>
+        </span>
+      </label>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Stock Count <span style="font-weight:400;color:#aaa;">(simple products only)</span></label>
+      {{ form.stock }}
+      <div class="form-help">Leave blank for unlimited. Not used when variants are defined.</div>
+      {% if form.stock.errors %}<div class="form-error">{{ form.stock.errors.0 }}</div>{% endif %}
+    </div>
+
+    {% if form.non_field_errors %}
+    <div class="form-error mb-2">{{ form.non_field_errors.0 }}</div>
+    {% endif %}
+
+    <div class="form-actions" style="margin-bottom:8px;">
+      <button type="submit" class="btn btn-primary">Update Product</button>
+      <a href="{% url 'myadmin:product_list' %}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     VARIANT BUILDER  — full attribute + generate + manage UI
+     ══════════════════════════════════════════════════════════════ -->
+<div class="card" style="padding:0;margin-bottom:32px;overflow:hidden;">
+
+  <!-- Tab header -->
+  <div id="vbTabs" style="display:flex;border-bottom:2px solid #e9ecef;background:#f8f9fa;">
+    <button class="vb-tab vb-tab-active" data-tab="attrs"    onclick="switchVbTab('attrs')">1 · Attributes</button>
+    <button class="vb-tab"               data-tab="generate" onclick="switchVbTab('generate')">2 · Generate Variants</button>
+    <button class="vb-tab"               data-tab="manage"   onclick="switchVbTab('manage')">3 · Manage Variants</button>
+  </div>
+
+  <!-- ── TAB 1: Attributes ── -->
+  <div id="vbPane-attrs" class="vb-pane" style="padding:24px;">
+    <p style="color:#555;margin-bottom:20px;font-size:0.9rem;">
+      Define the attributes customers choose from (e.g. Color, Size, Material).
+      Click <strong>Save Attributes</strong> when done before moving to step 2.
+    </p>
+
+    <div id="attrList"></div>
+
+    <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
+      <button type="button" class="btn btn-secondary" onclick="addAttr()">+ Add Attribute</button>
+      <button type="button" class="btn btn-primary"   onclick="saveAttributes()" id="saveAttrsBtn">Save Attributes</button>
+    </div>
+    <div id="attrSaveMsg" style="margin-top:10px;font-size:0.88rem;color:#27ae60;display:none;"></div>
+  </div>
+
+  <!-- ── TAB 2: Generate ── -->
+  <div id="vbPane-generate" class="vb-pane" style="padding:24px;display:none;">
+    <p style="color:#555;margin-bottom:20px;font-size:0.9rem;">
+      Check the combinations you want to create. Set a base price, then click
+      <strong>Generate Selected Variants</strong>.
+    </p>
+
+    <div style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <label style="font-weight:500;">Base Price (KES)</label>
+      <input type="number" id="genBasePrice" value="{{ object.price }}" min="0" step="0.01"
+             class="form-input" style="width:140px;">
+      <button type="button" class="btn btn-secondary btn-sm" onclick="checkAllCombos(true)">Select All</button>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="checkAllCombos(false)">Deselect All</button>
+    </div>
+
+    <div id="comboList" style="max-height:400px;overflow-y:auto;border:1px solid #e9ecef;border-radius:8px;padding:12px;"></div>
+    <div style="margin-top:16px;">
+      <button type="button" class="btn btn-primary" onclick="generateVariants()">Generate Selected Variants</button>
+    </div>
+    <div id="genMsg" style="margin-top:10px;font-size:0.88rem;display:none;"></div>
+  </div>
+
+  <!-- ── TAB 3: Manage ── -->
+  <div id="vbPane-manage" class="vb-pane" style="padding:24px;display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+      <span id="variantCountBadge" style="font-weight:600;font-size:0.95rem;"></span>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="loadVariants()">↻ Refresh</button>
+    </div>
+
+    <div style="overflow-x:auto;">
+      <table id="variantTable" style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+        <thead>
+          <tr style="background:#f8f9fa;text-align:left;">
+            <th style="padding:10px 12px;border-bottom:2px solid #e9ecef;">Variant</th>
+            <th style="padding:10px 12px;border-bottom:2px solid #e9ecef;">SKU</th>
+            <th style="padding:10px 12px;border-bottom:2px solid #e9ecef;">Price (KES)</th>
+            <th style="padding:10px 12px;border-bottom:2px solid #e9ecef;">Stock</th>
+            <th style="padding:10px 12px;border-bottom:2px solid #e9ecef;">Status</th>
+            <th style="padding:10px 12px;border-bottom:2px solid #e9ecef;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="variantTableBody">
+          <tr><td colspan="6" style="text-align:center;color:#aaa;padding:24px;">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="manageMsg" style="margin-top:10px;font-size:0.88rem;display:none;"></div>
+  </div>
+
+</div><!-- end variant builder card -->
+
+<!-- Edit-Variant Modal -->
+<div id="editVariantModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9000;overflow-y:auto;">
+  <div style="background:#fff;border-radius:12px;max-width:520px;width:90%;margin:60px auto;padding:28px;box-shadow:0 8px 40px rgba(0,0,0,.2);">
+    <h3 id="evTitle" style="margin:0 0 20px;font-size:1.1rem;"></h3>
+    <div class="form-group">
+      <label class="form-label">SKU</label>
+      <input type="text" id="ev_sku" class="form-input" placeholder="e.g. PROD-BLK-M">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+      <div class="form-group">
+        <label class="form-label form-label-required">Price (KES)</label>
+        <input type="number" id="ev_price" class="form-input" step="0.01" min="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Cost Price (KES)</label>
+        <input type="number" id="ev_cost_price" class="form-input" step="0.01" min="0" placeholder="Internal only">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Stock</label>
+        <input type="number" id="ev_stock" class="form-input" min="0" placeholder="Blank = unlimited">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Weight (kg)</label>
+        <input type="number" id="ev_weight" class="form-input" step="0.001" min="0" placeholder="optional">
+      </div>
+    </div>
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="checkbox" id="ev_available" class="form-checkbox"> Available
+      </label>
+    </div>
+    <div id="evError" style="color:#c0392b;font-size:0.85rem;margin-bottom:12px;display:none;"></div>
+    <div style="display:flex;gap:12px;justify-content:flex-end;">
+      <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+      <button type="button" class="btn btn-primary"   onclick="saveVariant()">Save Variant</button>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
+<style>
+/* Highlight fields with errors */
+.form-group:has(.form-error) .form-input,
+.form-group:has(.form-error) .form-select,
+.form-group:has(.form-error) .form-textarea {
+  border-color: #c0392b !important;
+  background: #fff8f8;
+}
+.vb-tab {
+  padding: 14px 20px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #666;
+  border-bottom: 3px solid transparent;
+  transition: all .15s;
+}
+.vb-tab:hover { color: #1a1a1a; background: #f0f0f0; }
+.vb-tab-active { color: #1a1a1a; border-bottom-color: #1a1a1a; background: #fff; }
+.attr-block {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 14px;
+  background: #fff;
+}
+.attr-value-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #f0f0f0;
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 0.83rem;
+  margin: 3px;
+}
+.attr-value-tag button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: #999;
+  font-size: 0.9rem;
+  padding: 0 2px;
+  line-height: 1;
+}
+.attr-value-tag button:hover { color: #c0392b; }
+.combo-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.combo-row:last-child { border-bottom: none; }
+.stock-in    { color: #27ae60; font-size: 0.8rem; font-weight: 600; }
+.stock-low   { color: #e67e22; font-size: 0.8rem; font-weight: 600; }
+.stock-out   { color: #c0392b; font-size: 0.8rem; font-weight: 600; }
+</style>
+
 <script>
-    // Image preview functionality
-    document.getElementById('{{ form.image.id_for_label }}').addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                document.getElementById('previewImg').src = event.target.result;
-                document.getElementById('imagePreview').style.display = 'block';
-            };
-            reader.readAsDataURL(file);
-        }
+// Auto-scroll to error summary
+document.addEventListener('DOMContentLoaded', function () {
+  const summary = document.getElementById('formErrorSummary');
+  if (summary) summary.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+const PRODUCT_ID = {{ object.pk }};
+const CSRF = '{{ csrf_token }}';
+const ATTRS_URL      = "{% url 'myadmin:product_attributes' object.pk %}";
+const ATTRS_SAVE_URL = "{% url 'myadmin:product_attributes_save' object.pk %}";
+const GEN_URL        = "{% url 'myadmin:product_generate_variants' object.pk %}";
+const VARIANTS_URL   = "{% url 'myadmin:product_variants' object.pk %}";
+const VARIANT_UPD    = id => `/myadmin/variants/${id}/update/`;
+const VARIANT_DEL    = id => `/myadmin/variants/${id}/delete/`;
+
+let savedAttrs = [];
+let editingVariantId = null;
+
+// ── Tab switching ─────────────────────────────────────────────────────────
+function switchVbTab(name) {
+  document.querySelectorAll('.vb-tab').forEach(t => t.classList.remove('vb-tab-active'));
+  document.querySelectorAll('.vb-pane').forEach(p => p.style.display = 'none');
+  document.querySelector(`[data-tab="${name}"]`).classList.add('vb-tab-active');
+  document.getElementById(`vbPane-${name}`).style.display = 'block';
+  if (name === 'generate') buildCombos();
+  if (name === 'manage')   loadVariants();
+}
+
+// ── Image preview ─────────────────────────────────────────────────────────
+document.getElementById('{{ form.image.id_for_label }}').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    // Show new file preview
+    document.getElementById('previewImg').src = ev.target.result;
+    document.getElementById('imagePreview').style.display = 'block';
+    // Also update the current image preview so user sees what will be saved
+    document.getElementById('currentImagePreview').src = ev.target.result;
+    document.getElementById('currentImageWrap').style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+});
+
+// ═════════════════════════════════════════════════════════
+// ── TAB 1: ATTRIBUTE BUILDER ──────────────────────────────
+// ═════════════════════════════════════════════════════════
+let attrData = [];  // [{name, values:[string]}]
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderAttrs() {
+  const el = document.getElementById('attrList');
+  if (!attrData.length) {
+    el.innerHTML = '<p style="color:#aaa;font-size:0.88rem;">No attributes yet. Click "+ Add Attribute".</p>';
+    return;
+  }
+  el.innerHTML = attrData.map((attr, ai) => `
+    <div class="attr-block">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+        <input type="text" class="form-input" style="width:200px;font-weight:600;"
+               value="${escHtml(attr.name)}"
+               oninput="attrData[${ai}].name=this.value"
+               placeholder="Attribute name (e.g. Color)">
+        <button type="button" class="btn btn-secondary btn-sm" style="color:#c0392b;"
+                onclick="removeAttr(${ai})">Remove</button>
+      </div>
+      <div id="attrVals-${ai}">
+        ${attr.values.map((v, vi) => `
+          <span class="attr-value-tag">
+            ${escHtml(v)}
+            <button type="button" onclick="removeVal(${ai},${vi})" title="Remove">×</button>
+          </span>`).join('')}
+      </div>
+      <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
+        <input type="text" id="newVal-${ai}" class="form-input" style="width:160px;"
+               placeholder="Add value" onkeydown="if(event.key==='Enter'){event.preventDefault();addVal(${ai});}">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="addVal(${ai})">+ Add</button>
+      </div>
+    </div>`).join('');
+}
+
+function addAttr() {
+  attrData.push({ name: '', values: [] });
+  renderAttrs();
+}
+function removeAttr(ai) {
+  if (!confirm('Remove this attribute and all its values?')) return;
+  attrData.splice(ai, 1);
+  renderAttrs();
+}
+function addVal(ai) {
+  const input = document.getElementById(`newVal-${ai}`);
+  const v = input.value.trim();
+  if (!v) return;
+  if (attrData[ai].values.includes(v)) { input.value=''; return; }
+  attrData[ai].values.push(v);
+  input.value = '';
+  renderAttrs();
+}
+function removeVal(ai, vi) {
+  attrData[ai].values.splice(vi, 1);
+  renderAttrs();
+}
+
+async function saveAttributes() {
+  const btn = document.getElementById('saveAttrsBtn');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  const msg = document.getElementById('attrSaveMsg');
+  msg.style.display = 'none';
+  try {
+    const res = await fetch(ATTRS_SAVE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      body: JSON.stringify({ attributes: attrData }),
     });
+    const d = await res.json();
+    if (d.success) {
+      msg.style.color = '#27ae60';
+      msg.textContent = '✓ Attributes saved. Go to step 2 to generate variants.';
+      msg.style.display = 'block';
+      await loadSavedAttrs();
+    } else {
+      msg.style.color = '#c0392b';
+      msg.textContent = 'Error: ' + d.error;
+      msg.style.display = 'block';
+    }
+  } catch(e) {
+    msg.style.color = '#c0392b'; msg.textContent = 'Network error'; msg.style.display = 'block';
+  }
+  btn.disabled = false; btn.textContent = 'Save Attributes';
+}
+
+async function loadSavedAttrs() {
+  const res = await fetch(ATTRS_URL);
+  const d = await res.json();
+  savedAttrs = d.attributes;
+  // Sync attrData text names/values from server response
+  attrData = savedAttrs.map(a => ({ name: a.name, values: a.values.map(v => v.value) }));
+  renderAttrs();
+}
+
+// ═════════════════════════════════════════════════════════
+// ── TAB 2: GENERATE VARIANTS ──────────────────────────────
+// ═════════════════════════════════════════════════════════
+let allCombinations = []; // [{label, valueIds:[]}]
+
+function cartesianProduct(arrays) {
+  if (!arrays.length) return [[]];
+  return arrays.reduce((acc, arr) =>
+    acc.flatMap(a => arr.map(b => [...a, b])), [[]]);
+}
+
+function buildCombos() {
+  if (!savedAttrs.length) {
+    document.getElementById('comboList').innerHTML =
+      '<p style="color:#aaa;padding:12px;font-size:0.88rem;">Save attributes first (step 1).</p>';
+    return;
+  }
+  const attrArrays = savedAttrs.map(a => a.values);
+  if (attrArrays.some(a => !a.length)) {
+    document.getElementById('comboList').innerHTML =
+      '<p style="color:#e67e22;padding:12px;font-size:0.88rem;">One or more attributes have no values. Add values in step 1.</p>';
+    return;
+  }
+  const products = cartesianProduct(attrArrays);
+  allCombinations = products.map(combo => ({
+    label: combo.map(v => v.value).join(' / '),
+    valueIds: combo.map(v => v.id),
+  }));
+  const html = allCombinations.map((c, i) => `
+    <div class="combo-row">
+      <input type="checkbox" id="combo-${i}" checked style="width:16px;height:16px;cursor:pointer;">
+      <label for="combo-${i}" style="cursor:pointer;flex:1;">${escHtml(c.label)}</label>
+    </div>`).join('');
+  document.getElementById('comboList').innerHTML = html ||
+    '<p style="color:#aaa;padding:12px;">No combinations available.</p>';
+}
+
+function checkAllCombos(checked) {
+  document.querySelectorAll('#comboList input[type=checkbox]').forEach(cb => cb.checked = checked);
+}
+
+async function generateVariants() {
+  const selected = allCombinations.filter((_, i) =>
+    document.getElementById(`combo-${i}`)?.checked);
+  if (!selected.length) {
+    showGenMsg('Select at least one combination.', '#c0392b'); return;
+  }
+  const basePrice = document.getElementById('genBasePrice').value;
+  const res = await fetch(GEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ combinations: selected.map(c => c.valueIds), base_price: basePrice }),
+  });
+  const d = await res.json();
+  if (d.success) {
+    showGenMsg(`✓ ${d.message}. Go to step 3 to set prices and stock.`, '#27ae60');
+  } else {
+    showGenMsg('Error: ' + d.error, '#c0392b');
+  }
+}
+function showGenMsg(txt, color) {
+  const el = document.getElementById('genMsg');
+  el.textContent = txt; el.style.color = color; el.style.display = 'block';
+}
+
+// ═════════════════════════════════════════════════════════
+// ── TAB 3: MANAGE VARIANTS ────────────────────────────────
+// ═════════════════════════════════════════════════════════
+async function loadVariants() {
+  const tbody = document.getElementById('variantTableBody');
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#aaa;padding:24px;">Loading…</td></tr>';
+  const res = await fetch(VARIANTS_URL);
+  const d = await res.json();
+  const variants = d.variants;
+  document.getElementById('variantCountBadge').textContent =
+    `${variants.length} Variant${variants.length !== 1 ? 's' : ''}`;
+  if (!variants.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#aaa;padding:24px;">No variants yet. Generate them in step 2.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = variants.map(v => {
+    const statusBadge = v.stock_status === 'out_of_stock'
+      ? `<span class="stock-out">Out of Stock</span>`
+      : v.stock_status === 'low_stock'
+      ? `<span class="stock-low">Low Stock (${v.stock})</span>`
+      : `<span class="stock-in">In Stock${v.stock !== null ? ' ('+v.stock+')' : ''}</span>`;
+    const avail = v.is_available
+      ? '<span style="color:#27ae60;font-size:0.8rem;">● Active</span>'
+      : '<span style="color:#aaa;font-size:0.8rem;">● Inactive</span>';
+    return `<tr style="border-bottom:1px solid #f0f0f0;">
+      <td style="padding:10px 12px;font-weight:500;">${escHtml(v.display_name)}</td>
+      <td style="padding:10px 12px;color:#666;">${escHtml(v.sku || '—')}</td>
+      <td style="padding:10px 12px;">Ksh ${parseFloat(v.price).toLocaleString()}</td>
+      <td style="padding:10px 12px;">${statusBadge}</td>
+      <td style="padding:10px 12px;">${avail}</td>
+      <td style="padding:10px 12px;">
+        <button class="btn btn-secondary btn-sm" onclick="openEditModal(${v.id})">Edit</button>
+        <button class="btn btn-secondary btn-sm" style="color:#c0392b;margin-left:6px;"
+                onclick="deleteVariant(${v.id}, '${escHtml(v.display_name)}')">Delete</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Edit-variant modal ────────────────────────────────────
+async function openEditModal(variantId) {
+  const res = await fetch(VARIANTS_URL);
+  const d = await res.json();
+  const v = d.variants.find(x => x.id === variantId);
+  if (!v) return;
+  editingVariantId = variantId;
+  document.getElementById('evTitle').textContent = `Edit: ${v.display_name}`;
+  document.getElementById('ev_sku').value        = v.sku || '';
+  document.getElementById('ev_price').value      = v.price;
+  document.getElementById('ev_cost_price').value = v.cost_price || '';
+  document.getElementById('ev_stock').value      = v.stock !== null ? v.stock : '';
+  document.getElementById('ev_weight').value     = v.weight || '';
+  document.getElementById('ev_available').checked = v.is_available;
+  document.getElementById('evError').style.display = 'none';
+  document.getElementById('editVariantModal').style.display = 'block';
+}
+
+function closeEditModal() {
+  document.getElementById('editVariantModal').style.display = 'none';
+  editingVariantId = null;
+}
+
+async function saveVariant() {
+  if (!editingVariantId) return;
+  const errEl = document.getElementById('evError');
+  errEl.style.display = 'none';
+  const payload = {
+    sku:        document.getElementById('ev_sku').value,
+    price:      document.getElementById('ev_price').value,
+    cost_price: document.getElementById('ev_cost_price').value,
+    stock:      document.getElementById('ev_stock').value,
+    weight:     document.getElementById('ev_weight').value,
+    is_available: document.getElementById('ev_available').checked,
+  };
+  if (!payload.price) { errEl.textContent = 'Price is required.'; errEl.style.display = 'block'; return; }
+  const res = await fetch(VARIANT_UPD(editingVariantId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify(payload),
+  });
+  const d = await res.json();
+  if (d.success) {
+    closeEditModal();
+    loadVariants();
+    showManageMsg('✓ Variant saved.', '#27ae60');
+  } else {
+    errEl.textContent = 'Error: ' + d.error;
+    errEl.style.display = 'block';
+  }
+}
+
+async function deleteVariant(variantId, name) {
+  if (!confirm(`Delete variant "${name}"? This cannot be undone.`)) return;
+  const res = await fetch(VARIANT_DEL(variantId), {
+    method: 'POST',
+    headers: { 'X-CSRFToken': CSRF },
+  });
+  const d = await res.json();
+  if (d.success) { loadVariants(); showManageMsg('Variant deleted.', '#e67e22'); }
+  else showManageMsg('Error: ' + d.error, '#c0392b');
+}
+
+function showManageMsg(txt, color) {
+  const el = document.getElementById('manageMsg');
+  el.textContent = txt; el.style.color = color; el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 4000);
+}
+
+// close modal on backdrop click
+document.getElementById('editVariantModal').addEventListener('click', function(e) {
+  if (e.target === this) closeEditModal();
+});
+
+// ── Init: load existing attributes on page ready ──────────
+(async function init() {
+  await loadSavedAttrs();
+  // Pre-load variant count badge
+  try {
+    const res = await fetch(VARIANTS_URL);
+    const d = await res.json();
+    const badge = document.getElementById('variantCountBadge');
+    if (badge) badge.textContent = `${d.variants.length} Variant${d.variants.length !== 1 ? 's' : ''}`;
+  } catch(_) {}
+})();
 </script>
 {% endblock %}

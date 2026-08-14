@@ -19,13 +19,13 @@
 
 <!-- Search and Filters -->
 <div class="filters-bar">
-    <form method="get" action="{% url 'myadmin:order_list' %}">
+    <form method="get" action="{% url 'myadmin:order_list' %}" id="filterForm">
         <div class="filters-row">
             <div class="filter-group">
                 <label for="search" class="form-label">Search</label>
-                <input type="text" id="search" name="search" class="form-input" placeholder="Order number or customer name" value="{{ search_query }}">
+                <input type="text" id="search" name="search" class="form-input"
+                       placeholder="Order number or customer name" value="{{ search_query }}">
             </div>
-            
             <div class="filter-group">
                 <label for="status" class="form-label">Status</label>
                 <select id="status" name="status" class="form-select">
@@ -35,18 +35,15 @@
                     {% endfor %}
                 </select>
             </div>
-            
             <div class="filter-group">
                 <label for="date_from" class="form-label">Date From</label>
                 <input type="date" id="date_from" name="date_from" class="form-input" value="{{ date_from }}">
             </div>
-            
             <div class="filter-group">
                 <label for="date_to" class="form-label">Date To</label>
                 <input type="date" id="date_to" name="date_to" class="form-input" value="{{ date_to }}">
             </div>
-            
-            <div class="filter-group" style="display: flex; align-items: end; gap: 8px;">
+            <div class="filter-group" style="display:flex;align-items:end;gap:8px;">
                 <button type="submit" class="btn btn-primary">Apply Filters</button>
                 <a href="{% url 'myadmin:order_list' %}" class="btn btn-secondary">Clear</a>
             </div>
@@ -54,77 +51,130 @@
     </form>
 </div>
 
-<!-- Orders Table -->
-<div class="card">
-    <div style="margin-bottom: 16px;">
-        <span class="text-muted">{{ page_obj.paginator.count }} order(s) total</span>
-    </div>
-    
-    <div class="table-container">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Order Number</th>
-                    <th>Customer</th>
-                    <th>Phone</th>
-                    <th>Total Amount</th>
-                    <th>Status</th>
-                    <th>Date</th>
-                    <th style="width: 100px;">Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for order in orders %}
-                <tr>
-                    <td><strong>{{ order.order_number }}</strong></td>
-                    <td>{{ order.customer_name }}</td>
-                    <td>{{ order.customer_phone }}</td>
-                    <td>KES {{ order.total_amount|thousand_separator }}</td>
-                    <td>
-                        {% if order.status == 'pending' %}
-                        <span class="badge badge-warning">Pending</span>
-                        {% elif order.status == 'confirmed' %}
-                        <span class="badge badge-success">Confirmed</span>
-                        {% elif order.status == 'processing' %}
-                        <span class="badge badge-success">Processing</span>
-                        {% elif order.status == 'shipped' %}
-                        <span class="badge badge-success">Shipped</span>
-                        {% elif order.status == 'delivered' %}
-                        <span class="badge badge-success">Delivered</span>
-                        {% elif order.status == 'cancelled' %}
-                        <span class="badge badge-danger">Cancelled</span>
-                        {% else %}
-                        <span class="badge badge-secondary">{{ order.get_status_display }}</span>
-                        {% endif %}
-                    </td>
-                    <td>{{ order.created_at|date:"M d, Y H:i" }}</td>
-                    <td>
-                        <a href="{% url 'myadmin:order_detail' order.pk %}" class="btn btn-secondary" style="padding: 6px 12px; font-size: 14px;">View</a>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="7" class="text-center text-muted" style="padding: 32px;">
-                        No orders found.
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+<!-- Bulk Action Form wraps the entire table -->
+<form method="post" action="{% url 'myadmin:order_bulk_action' %}" id="bulkForm">
+    {% csrf_token %}
+    <!-- Preserve current filters so the redirect lands on the same filtered view -->
+    <input type="hidden" name="return_params" value="{{ request.GET.urlencode }}">
+
+    <div class="card">
+
+        <!-- Bulk toolbar -->
+        <div id="bulkToolbar" style="display:none; align-items:center; gap:12px; margin-bottom:16px;
+             padding:10px 14px; background:#f0f4ff; border:1px solid #d0d8ff; border-radius:8px; flex-wrap:wrap;">
+            <span id="selectedCount" style="font-weight:600; font-size:0.9rem; color:#333;">0 selected</span>
+            <select name="action" id="bulkAction" class="form-select" style="width:auto; min-width:200px;">
+                <option value="">— Choose action —</option>
+                <optgroup label="Change Status">
+                    <option value="mark_confirmed">Mark as Confirmed</option>
+                    <option value="mark_processing">Mark as Processing</option>
+                    <option value="mark_shipped">Mark as Shipped</option>
+                    <option value="mark_delivered">Mark as Delivered</option>
+                    <option value="mark_cancelled">Mark as Cancelled</option>
+                </optgroup>
+                <optgroup label="Danger Zone">
+                    <option value="delete">Delete Selected</option>
+                </optgroup>
+            </select>
+            <button type="button" class="btn btn-primary" onclick="submitBulk()">Apply</button>
+            <button type="button" class="btn btn-secondary" onclick="clearSelection()">Clear Selection</button>
+        </div>
+
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
+            <span class="text-muted">{{ page_obj.paginator.count }} order(s) total</span>
+        </div>
+
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th style="width:40px;">
+                            <input type="checkbox" id="selectAll" title="Select all on this page"
+                                   style="cursor:pointer; width:16px; height:16px;">
+                        </th>
+                        <th>Order Number</th>
+                        <th>Customer</th>
+                        <th>Phone</th>
+                        <th>Total Amount</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                        <th style="width:80px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in orders %}
+                    <tr class="order-row" id="row-{{ order.pk }}">
+                        <td>
+                            <input type="checkbox" name="order_ids" value="{{ order.pk }}"
+                                   class="order-checkbox"
+                                   style="cursor:pointer; width:16px; height:16px;">
+                        </td>
+                        <td><strong>{{ order.order_number }}</strong></td>
+                        <td>{{ order.customer_name }}</td>
+                        <td>{{ order.customer_phone }}</td>
+                        <td>KES {{ order.total_amount|thousand_separator }}</td>
+                        <td>
+                            {% if order.status == 'pending' %}
+                            <span class="badge badge-warning">Pending</span>
+                            {% elif order.status == 'confirmed' %}
+                            <span class="badge badge-success">Confirmed</span>
+                            {% elif order.status == 'processing' %}
+                            <span class="badge badge-success">Processing</span>
+                            {% elif order.status == 'shipped' %}
+                            <span class="badge badge-success">Shipped</span>
+                            {% elif order.status == 'delivered' %}
+                            <span class="badge badge-success">Delivered</span>
+                            {% elif order.status == 'cancelled' %}
+                            <span class="badge badge-danger">Cancelled</span>
+                            {% else %}
+                            <span class="badge badge-secondary">{{ order.get_status_display }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ order.created_at|date:"M d, Y H:i" }}</td>
+                        <td>
+                            <a href="{% url 'myadmin:order_detail' order.pk %}"
+                               class="btn btn-secondary" style="padding:5px 10px; font-size:13px;">View</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted" style="padding:32px;">
+                            No orders found.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div><!-- /card -->
+</form>
+
+<!-- Confirm-delete modal -->
+<div id="deleteConfirmModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.45);
+     z-index:9999; align-items:center; justify-content:center;">
+    <div style="background:#fff; border-radius:12px; padding:32px; max-width:420px; width:90%;
+                box-shadow:0 8px 40px rgba(0,0,0,.2);">
+        <h3 style="margin:0 0 12px; font-size:1.1rem;">Delete Orders?</h3>
+        <p id="deleteConfirmText" style="color:#555; margin-bottom:24px;"></p>
+        <div style="display:flex; gap:10px; justify-content:flex-end;">
+            <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+            <button class="btn btn-primary" style="background:#c0392b; border-color:#c0392b;"
+                    id="confirmDeleteBtn">Delete</button>
+        </div>
     </div>
 </div>
 
 <!-- Pagination -->
 {% if page_obj.has_other_pages %}
-<div class="pagination">
+<div class="pagination" style="margin-top:20px;">
     {% if page_obj.has_previous %}
     <a href="?page=1{% if search_query %}&search={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-btn">« First</a>
-    <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-btn">‹ Previous</a>
+    <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-btn">‹ Prev</a>
     {% else %}
     <button class="page-btn" disabled>« First</button>
-    <button class="page-btn" disabled>‹ Previous</button>
+    <button class="page-btn" disabled>‹ Prev</button>
     {% endif %}
-    
+
     {% for num in page_obj.paginator.page_range %}
         {% if page_obj.number == num %}
         <span class="page-btn active">{{ num }}</span>
@@ -132,7 +182,7 @@
         <a href="?page={{ num }}{% if search_query %}&search={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-btn">{{ num }}</a>
         {% endif %}
     {% endfor %}
-    
+
     {% if page_obj.has_next %}
     <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-btn">Next ›</a>
     <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&search={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-btn">Last »</a>
@@ -142,4 +192,88 @@
     {% endif %}
 </div>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const checkboxes  = () => document.querySelectorAll('.order-checkbox');
+const toolbar     = document.getElementById('bulkToolbar');
+const countLabel  = document.getElementById('selectedCount');
+const selectAllCb = document.getElementById('selectAll');
+
+function updateToolbar() {
+    const checked = [...checkboxes()].filter(c => c.checked);
+    if (checked.length > 0) {
+        toolbar.style.display  = 'flex';
+        countLabel.textContent = `${checked.length} order${checked.length > 1 ? 's' : ''} selected`;
+    } else {
+        toolbar.style.display  = 'none';
+    }
+    // Keep select-all in sync
+    const all = checkboxes();
+    selectAllCb.indeterminate = checked.length > 0 && checked.length < all.length;
+    selectAllCb.checked = all.length > 0 && checked.length === all.length;
+}
+
+// Select / deselect all on page
+selectAllCb.addEventListener('change', function () {
+    checkboxes().forEach(c => {
+        c.checked = this.checked;
+        c.closest('tr').classList.toggle('row-selected', this.checked);
+    });
+    updateToolbar();
+});
+
+// Individual checkbox
+document.querySelectorAll('.order-checkbox').forEach(cb => {
+    cb.addEventListener('change', function () {
+        this.closest('tr').classList.toggle('row-selected', this.checked);
+        updateToolbar();
+    });
+});
+
+function clearSelection() {
+    checkboxes().forEach(c => { c.checked = false; c.closest('tr').classList.remove('row-selected'); });
+    selectAllCb.checked = false;
+    selectAllCb.indeterminate = false;
+    toolbar.style.display = 'none';
+}
+
+function submitBulk() {
+    const action = document.getElementById('bulkAction').value;
+    if (!action) { alert('Please choose an action first.'); return; }
+
+    const checked = [...checkboxes()].filter(c => c.checked);
+    if (!checked.length) { alert('No orders selected.'); return; }
+
+    if (action === 'delete') {
+        // Show confirmation modal
+        document.getElementById('deleteConfirmText').textContent =
+            `You are about to permanently delete ${checked.length} order${checked.length > 1 ? 's' : ''}. This cannot be undone.`;
+        const modal = document.getElementById('deleteConfirmModal');
+        modal.style.display = 'flex';
+        document.getElementById('confirmDeleteBtn').onclick = function () {
+            closeDeleteModal();
+            document.getElementById('bulkForm').submit();
+        };
+    } else {
+        document.getElementById('bulkForm').submit();
+    }
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteConfirmModal').style.display = 'none';
+}
+
+// Highlight selected rows
+document.addEventListener('DOMContentLoaded', function () {
+    const style = document.createElement('style');
+    style.textContent = `
+        .order-row { transition: background .1s; }
+        .row-selected { background: #f0f4ff !important; }
+        .order-row:hover { background: #fafafa; }
+    `;
+    document.head.appendChild(style);
+});
+</script>
 {% endblock %}

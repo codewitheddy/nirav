@@ -1,5 +1,9 @@
 from django.contrib import admin
-from .models import Category, Product, Order, OrderItem
+from django.core.exceptions import ValidationError
+from .models import (
+    Category, Product, ProductVariant, Order, OrderItem, Promotion, HeroBanner,
+    Attribute, AttributeValue, VariantAttributeValue,
+)
 
 # Customize admin site headers
 admin.site.site_header = "POPSHOP ADMIN"
@@ -18,14 +22,29 @@ class CategoryAdmin(admin.ModelAdmin):
     product_count.short_description = 'Products'
 
 
+class ProductVariantInline(admin.TabularInline):
+    model = ProductVariant
+    extra = 1
+    fields = ['size', 'color', 'price', 'image_url', 'image', 'is_available']
+    
+    def clean_sku(self, value):
+        """Validate SKU is unique if provided."""
+        if value:
+            existing = ProductVariant.objects.filter(sku=value).exclude(pk=self.instance.pk)
+            if existing.exists():
+                raise ValidationError("SKU must be unique.")
+        return value
+
+
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ['name', 'category', 'price', 'is_available', 'created_at']
+    list_display = ['name', 'category', 'price', 'variant_count', 'is_available', 'created_at']
     list_editable = ['is_available', 'price']
     prepopulated_fields = {'slug': ('name',)}
     search_fields = ['name', 'description', 'short_description']
     date_hierarchy = 'created_at'
     list_per_page = 20
+    inlines = [ProductVariantInline]
     
     fieldsets = (
         ('Basic Information', {
@@ -35,15 +54,21 @@ class ProductAdmin(admin.ModelAdmin):
             'fields': ('short_description', 'description')
         }),
         ('Pricing & Availability', {
-            'fields': ('price', 'is_available')
+            'fields': ('price', 'is_available'),
+            'description': 'Base price is used when no variants are defined. If variants are added, each variant has its own price.'
         }),
         ('Media', {
             'fields': ('image_url', 'image_base64', 'image'),
-            'description': 'Choose one option: 1) External URL (recommended), 2) Base64 data, or 3) Upload file'
+            'description': 'Default product image. Each variant can also have its own image.'
         }),
     )
     
     actions = ['make_available', 'make_unavailable']
+    
+    def variant_count(self, obj):
+        count = obj.variants.count()
+        return count if count else '—'
+    variant_count.short_description = 'Variants'
     
     def make_available(self, request, queryset):
         updated = queryset.update(is_available=True)
@@ -54,6 +79,58 @@ class ProductAdmin(admin.ModelAdmin):
         updated = queryset.update(is_available=False)
         self.message_user(request, f'{updated} product(s) marked as unavailable.')
     make_unavailable.short_description = 'Mark selected products as unavailable'
+
+
+@admin.register(ProductVariant)
+class ProductVariantAdmin(admin.ModelAdmin):
+    list_display = ['product', 'display_name', 'sku', 'price', 'stock', 'is_available']
+    list_filter = ['is_available', 'product__category']
+    search_fields = ['product__name', 'sku', 'size', 'color']
+    list_editable = ['price', 'is_available']
+    
+    def save_model(self, request, obj, form, change):
+        """Call clean() before saving to validate against duplicates."""
+        obj.full_clean()  # This will call clean() which checks for duplicates
+        super().save_model(request, obj, form, change)
+
+
+class AttributeValueInline(admin.TabularInline):
+    model = AttributeValue
+    extra = 2
+    fields = ['value', 'position']
+
+
+@admin.register(Attribute)
+class AttributeAdmin(admin.ModelAdmin):
+    list_display = ['name', 'product', 'position']
+    list_filter = ['product__category']
+    search_fields = ['name', 'product__name']
+    inlines = [AttributeValueInline]
+
+
+@admin.register(VariantAttributeValue)
+class VariantAttributeValueAdmin(admin.ModelAdmin):
+    list_display = ['variant', 'attribute_value']
+    search_fields = ['variant__product__name', 'attribute_value__value']
+
+
+@admin.register(HeroBanner)
+class HeroBannerAdmin(admin.ModelAdmin):
+    list_display = ['heading_preview', 'eyebrow', 'color_scheme', 'is_active', 'order', 'created_at']
+    list_editable = ['is_active', 'order']
+    list_filter = ['is_active', 'color_scheme']
+
+    def heading_preview(self, obj):
+        return obj.heading[:60]
+    heading_preview.short_description = 'Heading'
+
+
+@admin.register(Promotion)
+class PromotionAdmin(admin.ModelAdmin):
+    list_display = ['name', 'discount_type', 'discount_value', 'scope', 'min_quantity', 'is_active', 'starts_at', 'ends_at']
+    list_editable = ['is_active']
+    list_filter = ['is_active', 'discount_type', 'scope']
+    filter_horizontal = ['products']
 
 
 class OrderItemInline(admin.TabularInline):

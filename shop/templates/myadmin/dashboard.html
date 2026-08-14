@@ -60,7 +60,7 @@
                 <tr>
                     <td><strong>{{ order.order_number }}</strong></td>
                     <td>{{ order.customer_name }}</td>
-                    <td>KES {{ order.total_amount|floatformat:2 }}</td>
+                    <td>KES {{ order.total_amount|thousand_separator }}</td>
                     <td>
                         {% if order.status == 'pending' %}
                         <span class="badge badge-warning">Pending</span>
@@ -133,3 +133,4 @@
 </div>
 {% endif %}
 {% endblock %}
+

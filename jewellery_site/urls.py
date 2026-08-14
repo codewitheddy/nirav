@@ -24,7 +24,8 @@ def health_check(request):
 urlpatterns = [
     # Health check endpoint
     path('health/', health_check, name='health_check'),
-    
+    # Favicon — redirects browser's automatic /favicon.ico request to the logo
+    path('favicon.ico', RedirectView.as_view(url='/static/images/plogo.png', permanent=True)),
     # Redirect /admin to /myadmin
     path('admin/', RedirectView.as_view(url='/myadmin/', permanent=False)),
     path('myadmin/', include('shop.urls_admin')),

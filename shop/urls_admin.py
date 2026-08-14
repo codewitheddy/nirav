@@ -17,9 +17,19 @@ urlpatterns = [
     path('products/<int:pk>/edit/', views_admin.ProductUpdateView.as_view(), name='product_edit'),
     path('products/<int:pk>/delete/', views_admin.ProductDeleteView.as_view(), name='product_delete'),
     path('products/bulk-action/', views_admin.ProductBulkActionView.as_view(), name='product_bulk_action'),
+
+    # Product Attribute + Variant AJAX endpoints
+    path('products/<int:pk>/stock/', views_admin.UpdateProductStockView.as_view(), name='product_stock_update'),
+    path('products/<int:pk>/attributes/', views_admin.GetProductAttributesView.as_view(), name='product_attributes'),
+    path('products/<int:pk>/attributes/save/', views_admin.SaveProductAttributesView.as_view(), name='product_attributes_save'),
+    path('products/<int:pk>/generate-variants/', views_admin.GenerateVariantsView.as_view(), name='product_generate_variants'),
+    path('products/<int:pk>/variants/', views_admin.GetProductVariantsView.as_view(), name='product_variants'),
+    path('variants/<int:pk>/update/', views_admin.UpdateVariantView.as_view(), name='variant_update'),
+    path('variants/<int:pk>/delete/', views_admin.DeleteVariantView.as_view(), name='variant_delete'),
     
     # Orders
     path('orders/', views_admin.OrderListView.as_view(), name='order_list'),
+    path('orders/bulk-action/', views_admin.OrderBulkActionView.as_view(), name='order_bulk_action'),
     path('orders/<int:pk>/', views_admin.OrderDetailView.as_view(), name='order_detail'),
     path('orders/<int:pk>/update-status/', views_admin.OrderStatusUpdateView.as_view(), name='order_update_status'),
     
@@ -39,4 +49,19 @@ urlpatterns = [
     path('users/<int:pk>/edit/', views_admin.UserUpdateView.as_view(), name='user_edit'),
     path('users/<int:pk>/password/', views_admin.UserPasswordChangeView.as_view(), name='user_password_change'),
     path('users/<int:pk>/delete/', views_admin.UserDeleteView.as_view(), name='user_delete'),
+
+    # Promotions
+    path('promotions/', views_admin.PromotionListView.as_view(), name='promotion_list'),
+    path('promotions/add/', views_admin.PromotionCreateView.as_view(), name='promotion_add'),
+    path('promotions/<int:pk>/edit/', views_admin.PromotionUpdateView.as_view(), name='promotion_edit'),
+    path('promotions/<int:pk>/delete/', views_admin.PromotionDeleteView.as_view(), name='promotion_delete'),
+    path('promotions/<int:pk>/toggle/', views_admin.PromotionToggleView.as_view(), name='promotion_toggle'),
+
+    # Hero Banners
+    path('hero/', views_admin.HeroBannerListView.as_view(), name='hero_list'),
+    path('hero/add/', views_admin.HeroBannerCreateView.as_view(), name='hero_add'),
+    path('hero/<int:pk>/edit/', views_admin.HeroBannerUpdateView.as_view(), name='hero_edit'),
+    path('hero/<int:pk>/delete/', views_admin.HeroBannerDeleteView.as_view(), name='hero_delete'),
+    path('hero/<int:pk>/toggle/', views_admin.HeroBannerToggleView.as_view(), name='hero_toggle'),
+    path('hero/<int:pk>/clear-image/', views_admin.HeroBannerClearImageView.as_view(), name='hero_clear_image'),
 ]

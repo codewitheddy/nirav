@@ -125,13 +125,17 @@
                 {% for item in order_items %}
                 <tr>
                     <td>
-                        {% if item.product.get_image_url %}
-                        <img src="{{ item.product.get_image_url }}" alt="{{ item.product.name }}" class="table-thumbnail">
+                        {% if item.product and item.product.get_image_url %}
+                        <img src="{{ item.product.get_image_url }}" alt="{{ item.get_display_name }}" class="table-thumbnail">
                         {% else %}
                         <div class="table-thumbnail" style="background: var(--gray-light); display: flex; align-items: center; justify-content: center; color: var(--gray-dark); font-size: 10px;">No Image</div>
                         {% endif %}
                     </td>
-                    <td><strong>{{ item.product.name }}</strong></td>
+                    <td>
+                        <strong>{{ item.get_display_name }}</strong>
+                        {% if not item.product %}<span class="badge badge-warning" style="font-size:0.7rem;margin-left:6px;">Deleted</span>{% endif %}
+                        {% if item.variant %}<div style="font-size:0.82rem;color:#888;margin-top:2px;">{{ item.variant.display_name }}</div>{% endif %}
+                    </td>
                     <td>{{ item.quantity }}</td>
                     <td>KES {{ item.price|thousand_separator }}</td>
                     <td><strong>KES {{ item.get_subtotal|thousand_separator }}</strong></td>

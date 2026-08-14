@@ -36,8 +36,7 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure--z=8xzpdgrr+146!ma=#)
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
-
+ALLOWED_HOSTS = ['thepopshop.co.ke', 'www.thepopshop.co.ke', 'localhost', '127.0.0.1']
 
 # Application definition
 
@@ -91,13 +90,26 @@ WSGI_APPLICATION = 'jewellery_site.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASES = {
-    'default': dj_database_url.config(
-        default=config('DATABASE_URL', default=f'sqlite:///{BASE_DIR / "db.sqlite3"}'),
-        conn_max_age=600,  # Connection pooling - keep connections alive for 10 minutes
-        conn_health_checks=True,  # Check connection health before reusing
-    )
-}
+if DEBUG:
+    # Use SQLite for local development (no PostgreSQL required)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+else:
+    # PostgreSQL for production (cPanel)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': 'thepopsh_db',
+            'USER': 'thepopsh_admin',
+            'PASSWORD': 'Nirav1998*',
+            'HOST': 'localhost',
+            'PORT': '',
+        }
+    }
 
 
 # Password validation

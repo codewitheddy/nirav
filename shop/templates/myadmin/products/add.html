@@ -19,139 +19,164 @@
 </div>
 
 <div class="card">
-    <form method="post" enctype="multipart/form-data" action="{% url 'myadmin:product_add' %}">
-        {% csrf_token %}
-        
-        <div class="form-group">
-            <label for="{{ form.name.id_for_label }}" class="form-label form-label-required">{{ form.name.label }}</label>
-            {{ form.name }}
-            {% if form.name.errors %}
-            <div class="form-error">{{ form.name.errors.0 }}</div>
-            {% endif %}
-            {% if form.name.help_text %}
-            <div class="form-help">{{ form.name.help_text }}</div>
-            {% endif %}
+  <form method="post" enctype="multipart/form-data" id="productForm" action="{% url 'myadmin:product_add' %}">
+    {% csrf_token %}
+    {{ variant_formset.management_form }}
+
+    <!-- ── Error summary (top of form, visible immediately on failed submit) ── -->
+    {% if form.errors %}
+    <div id="formErrorSummary" style="background:#fff5f5;border:1px solid #f5c6cb;border-radius:8px;padding:14px 16px;margin-bottom:24px;">
+      <div style="font-weight:700;color:#c0392b;margin-bottom:8px;display:flex;align-items:center;gap:8px;">
+        <svg width="16" height="16" fill="none" stroke="#c0392b" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Please fix the following before saving:
+      </div>
+      <ul style="margin:0;padding-left:18px;color:#c0392b;font-size:0.88rem;line-height:1.8;">
+        {% for field in form %}
+          {% for error in field.errors %}
+          <li><strong>{{ field.label }}:</strong> {{ error }}</li>
+          {% endfor %}
+        {% endfor %}
+        {% for error in form.non_field_errors %}
+        <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <!-- ── Basic fields ── -->
+    <div class="form-group">
+      <label for="{{ form.name.id_for_label }}" class="form-label form-label-required">{{ form.name.label }}</label>
+      {{ form.name }}
+      {% if form.name.errors %}<div class="form-error">{{ form.name.errors.0 }}</div>{% endif %}
+    </div>
+
+    <div class="form-group">
+      <label for="{{ form.category.id_for_label }}" class="form-label form-label-required">{{ form.category.label }}</label>
+      {{ form.category }}
+      {% if form.category.errors %}<div class="form-error">{{ form.category.errors.0 }}</div>{% endif %}
+    </div>
+
+    <div class="form-group">
+      <label for="{{ form.short_description.id_for_label }}" class="form-label form-label-required">{{ form.short_description.label }}</label>
+      {{ form.short_description }}
+      {% if form.short_description.errors %}<div class="form-error">{{ form.short_description.errors.0 }}</div>{% endif %}
+      {% if form.short_description.help_text %}<div class="form-help">{{ form.short_description.help_text }}</div>{% endif %}
+    </div>
+
+    <div class="form-group">
+      <label for="{{ form.description.id_for_label }}" class="form-label form-label-required">{{ form.description.label }}</label>
+      {{ form.description }}
+      {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+    </div>
+
+    <div class="form-group">
+      <label for="{{ form.price.id_for_label }}" class="form-label form-label-required">{{ form.price.label }}</label>
+      {{ form.price }}
+      <div class="form-help">Base / display price in Ksh. Each variant can override this.</div>
+      {% if form.price.errors %}<div class="form-error">{{ form.price.errors.0 }}</div>{% endif %}
+    </div>
+
+    <!-- ── Images ── -->
+    <div class="card" style="background:var(--gray-light);padding:20px;margin-bottom:20px;">
+      <h3 style="margin-bottom:16px;font-size:18px;">Default Product Image</h3>
+      <div class="form-group">
+        <label for="{{ form.image_url.id_for_label }}" class="form-label">Image URL</label>
+        {{ form.image_url }}
+        {% if form.image_url.errors %}<div class="form-error">{{ form.image_url.errors.0 }}</div>{% endif %}
+      </div>
+      <div class="form-group">
+        <label for="{{ form.image.id_for_label }}" class="form-label">Upload Image (Optional)</label>
+        <input type="file" name="image" id="{{ form.image.id_for_label }}"
+               accept="image/jpeg,image/png,image/webp" class="form-file">
+        {% if form.image.errors %}<div class="form-error">{{ form.image.errors.0 }}</div>{% endif %}
+        <div id="imagePreview" style="margin-top:12px;display:none;">
+          <label class="form-label" style="margin-bottom:6px;">Preview</label>
+          <img id="previewImg" src="" alt="Preview"
+               style="max-width:200px;max-height:200px;border-radius:8px;display:block;object-fit:cover;">
         </div>
-        
-        <div class="form-group">
-            <label for="{{ form.category.id_for_label }}" class="form-label form-label-required">{{ form.category.label }}</label>
-            {{ form.category }}
-            {% if form.category.errors %}
-            <div class="form-error">{{ form.category.errors.0 }}</div>
-            {% endif %}
-            {% if form.category.help_text %}
-            <div class="form-help">{{ form.category.help_text }}</div>
-            {% endif %}
-        </div>
-        
-        <div class="form-group">
-            <label for="{{ form.short_description.id_for_label }}" class="form-label form-label-required">{{ form.short_description.label }}</label>
-            {{ form.short_description }}
-            {% if form.short_description.errors %}
-            <div class="form-error">{{ form.short_description.errors.0 }}</div>
-            {% endif %}
-            {% if form.short_description.help_text %}
-            <div class="form-help">{{ form.short_description.help_text }}</div>
-            {% endif %}
-        </div>
-        
-        <div class="form-group">
-            <label for="{{ form.description.id_for_label }}" class="form-label form-label-required">{{ form.description.label }}</label>
-            {{ form.description }}
-            {% if form.description.errors %}
-            <div class="form-error">{{ form.description.errors.0 }}</div>
-            {% endif %}
-            {% if form.description.help_text %}
-            <div class="form-help">{{ form.description.help_text }}</div>
-            {% endif %}
-        </div>
-        
-        <div class="form-group">
-            <label for="{{ form.price.id_for_label }}" class="form-label form-label-required">{{ form.price.label }}</label>
-            {{ form.price }}
-            {% if form.price.errors %}
-            <div class="form-error">{{ form.price.errors.0 }}</div>
-            {% endif %}
-            {% if form.price.help_text %}
-            <div class="form-help">{{ form.price.help_text }}</div>
-            {% endif %}
-        </div>
-        
-        <div class="card" style="background: var(--gray-light); padding: 20px; margin-bottom: 20px;">
-            <h3 style="margin-bottom: 16px; font-size: 18px;">Product Image (Choose One Option)</h3>
-            
-            <div class="form-group">
-                <label for="{{ form.image_url.id_for_label }}" class="form-label">{{ form.image_url.label }}</label>
-                {{ form.image_url }}
-                {% if form.image_url.errors %}
-                <div class="form-error">{{ form.image_url.errors.0 }}</div>
-                {% endif %}
-                {% if form.image_url.help_text %}
-                <div class="form-help">{{ form.image_url.help_text }}</div>
-                {% endif %}
-            </div>
-            
-            <div class="form-group">
-                <label for="{{ form.image.id_for_label }}" class="form-label">{{ form.image.label }}</label>
-                {{ form.image }}
-                {% if form.image.errors %}
-                <div class="form-error">{{ form.image.errors.0 }}</div>
-                {% endif %}
-                {% if form.image.help_text %}
-                <div class="form-help">{{ form.image.help_text }}</div>
-                {% endif %}
-                <div id="imagePreview" style="margin-top: 12px; display: none;">
-                    <img id="previewImg" src="" alt="Preview" style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 2px solid var(--gray-medium);">
-                </div>
-            </div>
-            
-            <div class="form-group" style="margin-bottom: 0;">
-                <label for="{{ form.image_base64.id_for_label }}" class="form-label">{{ form.image_base64.label }}</label>
-                {{ form.image_base64 }}
-                {% if form.image_base64.errors %}
-                <div class="form-error">{{ form.image_base64.errors.0 }}</div>
-                {% endif %}
-                {% if form.image_base64.help_text %}
-                <div class="form-help">{{ form.image_base64.help_text }}</div>
-                {% endif %}
-            </div>
-        </div>
-        
-        <div class="form-group">
-            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                {{ form.is_available }}
-                <span class="form-label" style="margin-bottom: 0;">{{ form.is_available.label }}</span>
-            </label>
-            {% if form.is_available.errors %}
-            <div class="form-error">{{ form.is_available.errors.0 }}</div>
-            {% endif %}
-        </div>
-        
-        {% if form.non_field_errors %}
-        <div class="form-error mb-2">{{ form.non_field_errors.0 }}</div>
-        {% endif %}
-        
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Save Product</button>
-            <a href="{% url 'myadmin:product_list' %}" class="btn btn-secondary">Cancel</a>
-        </div>
-    </form>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label for="{{ form.image_base64.id_for_label }}" class="form-label">Base64 Image (optional)</label>
+        {{ form.image_base64 }}
+      </div>
+    </div>
+
+    <!-- ── Flags ── -->
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        {{ form.is_available }}
+        <span class="form-label" style="margin-bottom:0;">{{ form.is_available.label }}</span>
+      </label>
+    </div>
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:12px 14px;background:#fffbf0;border:1px solid #f0e0a0;border-radius:8px;">
+        {{ form.is_featured }}
+        <span>
+          <span class="form-label" style="margin-bottom:0;">⭐ Featured Product</span>
+          <span class="form-help" style="display:block;margin-top:2px;">Featured products are highlighted in the storefront.</span>
+        </span>
+      </label>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Stock Count <span style="font-weight:400;color:#aaa;">(simple products only)</span></label>
+      {{ form.stock }}
+      <div class="form-help">Leave blank for unlimited. Not used when variants are defined.</div>
+      {% if form.stock.errors %}<div class="form-error">{{ form.stock.errors.0 }}</div>{% endif %}
+    </div>
+
+    <div class="form-actions" style="margin-bottom:32px;">
+      <button type="submit" class="btn btn-primary">Save Product</button>
+      <a href="{% url 'myadmin:product_list' %}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     VARIANTS PANEL  (shown after the product is saved)
+     ══════════════════════════════════════════════════════ -->
+<div class="card" style="padding:24px;margin-bottom:24px;">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+    <h3 style="font-size:18px;margin:0;">Product Variants</h3>
+  </div>
+  <p class="form-help" style="margin-bottom:16px;">
+    Save the product first, then open it for editing to add dynamic attributes and generate variants
+    (Color, Size, Material, etc.). The variant builder is available on the <strong>Edit</strong> page.
+  </p>
+  <div style="background:#f8f9fa;border:1px dashed #ccc;border-radius:8px;padding:20px;text-align:center;color:#888;">
+    Variants can be managed after the product is created.
+  </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
+<style>
+/* Highlight inputs that have errors */
+.form-group:has(.form-error) .form-input,
+.form-group:has(.form-error) .form-select,
+.form-group:has(.form-error) .form-textarea {
+  border-color: #c0392b !important;
+  background: #fff8f8;
+}
+</style>
 <script>
-    // Image preview functionality
-    document.getElementById('{{ form.image.id_for_label }}').addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                document.getElementById('previewImg').src = event.target.result;
-                document.getElementById('imagePreview').style.display = 'block';
-            };
-            reader.readAsDataURL(file);
-        }
-    });
+// Auto-scroll to error summary on page load if errors exist
+document.addEventListener('DOMContentLoaded', function () {
+  const summary = document.getElementById('formErrorSummary');
+  if (summary) {
+    summary.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+});
+
+document.getElementById('{{ form.image.id_for_label }}').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      document.getElementById('previewImg').src = ev.target.result;
+      document.getElementById('imagePreview').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  }
+});
 </script>
 {% endblock %}

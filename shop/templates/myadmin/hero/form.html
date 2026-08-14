@@ -1,0 +1,781 @@
+{% extends 'myadmin/base.html' %}
+{% load static %}
+
+{% block title %}{{ title }} - MyAdmin{% endblock %}
+
+{% block extra_css %}
+<style>
+.hero-preview {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    height: 200px;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--gray-medium);
+    margin-bottom: 24px;
+}
+.hero-preview-left {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 24px;
+    transition: background 0.3s;
+}
+.hero-preview-eyebrow { font-size: 0.65rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #c9a96e; margin-bottom: 8px; }
+.hero-preview-heading { font-family: Georgia, serif; font-size: 1.3rem; font-weight: 400; line-height: 1.2; margin-bottom: 8px; color: #1a1a1a; }
+.hero-preview-subtitle { font-size: 0.78rem; color: #777; margin-bottom: 12px; }
+.hero-preview-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.hero-preview-pill { font-size: 0.68rem; color: #555; display: inline-flex; align-items: center; gap: 4px; }
+.hero-preview-pill svg { flex-shrink: 0; }
+.hero-preview-btns { display: flex; gap: 8px; }
+.hero-preview-btn-primary { background: #1a1a1a; color: #fff; font-size: 0.7rem; padding: 6px 14px; border-radius: 4px; display:inline-block; }
+.hero-preview-btn-secondary { border: 1.5px solid #1a1a1a; color:#1a1a1a; font-size: 0.7rem; padding: 6px 14px; border-radius: 4px; display:inline-block; background:transparent; }
+.hero-preview-right { background: #eee; overflow: hidden; }
+.hero-preview-right img { width: 100%; height: 100%; object-fit: cover; }
+.color-or-transparent-wrap .transparent-btn {
+    background: none;
+    border: 1px dashed #bbb;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.78rem;
+    color: #888;
+    cursor: pointer;
+    width: 100%;
+    transition: border-color .15s, color .15s;
+}
+.color-or-transparent-wrap .transparent-btn:hover {
+    border-color: #1a1a1a;
+    color: #1a1a1a;
+}
+.color-or-transparent-wrap .transparent-btn.active {
+    border-color: #27ae60;
+    color: #27ae60;
+    background: #f0fff4;
+}
+.color-or-transparent-wrap .form-input {
+    flex: 1;
+    min-width: 0;
+}
+.section-divider { font-size: 0.75rem; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: #aaa; margin: 24px 0 14px; padding-bottom: 6px; border-bottom: 1px solid #eee; }
+.color-row { display: grid; gap: 12px; }
+.color-field { display: flex; flex-direction: column; gap: 4px; }
+.color-field label { font-size: 0.78rem; color: #666; font-weight: 500; }
+.pill-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'myadmin:dashboard' %}">Dashboard</a>
+    <span class="breadcrumbs-separator">›</span>
+    <a href="{% url 'myadmin:hero_list' %}">Hero Banners</a>
+    <span class="breadcrumbs-separator">›</span>
+    <span>{{ title }}</span>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">{{ title }}</h1>
+</div>
+
+<!-- Live preview -->
+<div class="hero-preview" id="heroPreview" style="background:{{ form.instance.bg_color|default:'#faf7f4' }};">
+    <div class="hero-preview-left" id="prevLeft">
+        <div class="hero-preview-eyebrow" id="prevEyebrow" style="color:{{ form.instance.eyebrow_color|default:'#c0567a' }};">{{ form.instance.eyebrow|default:'Timeless Beauty' }}</div>
+        <div class="hero-preview-heading" id="prevHeading" style="color:{{ form.instance.heading_color|default:'#1a1a1a' }};">{{ form.instance.heading|default:'Timeless Elegance, Crafted to Shine' }}</div>
+        <div class="hero-preview-subtitle" id="prevSubtitle" style="color:{{ form.instance.subtitle_color|default:'#777777' }};">{{ form.instance.subtitle|default:'Minimal jewelry for everyday confidence.' }}</div>
+        <div class="hero-preview-pills" id="prevPills">
+            <span class="hero-preview-pill" id="prevPill1" style="color:{{ form.instance.pill_text_color|default:'#555555' }};">
+                <svg id="prevPill1Icon" width="12" height="12" fill="none" stroke="{{ form.instance.pill_icon_color|default:'#c9a96e' }}" stroke-width="2" viewBox="0 0 24 24"></svg>
+                {{ form.instance.pill_1|default:'Hypoallergenic' }}
+            </span>
+            <span class="hero-preview-pill" id="prevPill2" style="color:{{ form.instance.pill_text_color|default:'#555555' }};">
+                <svg id="prevPill2Icon" width="12" height="12" fill="none" stroke="{{ form.instance.pill_icon_color|default:'#c9a96e' }}" stroke-width="2" viewBox="0 0 24 24"></svg>
+                {{ form.instance.pill_2|default:'Water Resistant' }}
+            </span>
+            <span class="hero-preview-pill" id="prevPill3" style="color:{{ form.instance.pill_text_color|default:'#555555' }};">
+                <svg id="prevPill3Icon" width="12" height="12" fill="none" stroke="{{ form.instance.pill_icon_color|default:'#c9a96e' }}" stroke-width="2" viewBox="0 0 24 24"></svg>
+                {{ form.instance.pill_3|default:'Tarnish Free' }}
+            </span>
+        </div>
+        <div class="hero-preview-btns">
+            <span class="hero-preview-btn-primary" id="prevCta1"
+                  style="background:{{ form.instance.btn_primary_bg|default:'#1a1a1a' }};color:{{ form.instance.btn_primary_text_color|default:'#ffffff' }};">
+                {{ form.instance.cta_primary_text|default:'Explore Collection' }}
+            </span>
+            <span class="hero-preview-btn-secondary" id="prevCta2"
+                  style="background:{{ form.instance.btn_secondary_bg|default:'transparent' }};color:{{ form.instance.btn_secondary_text_color|default:'#1a1a1a' }};border-color:{{ form.instance.btn_secondary_text_color|default:'#1a1a1a' }};">
+                {{ form.instance.cta_secondary_text|default:'Contact Us' }}
+            </span>
+        </div>
+    </div>
+    <div class="hero-preview-right" id="prevRight">
+        {% if form.instance.get_image_url %}
+        <img src="{{ form.instance.get_image_url }}" id="prevImg" alt="preview">
+        {% else %}
+        <div id="prevImgPlaceholder" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#ccc;font-size:0.85rem;">Image preview</div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <form method="post" enctype="multipart/form-data" id="bannerForm">
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+        <div class="form-error mb-2">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        <div class="section-divider">Content</div>
+
+        <div class="form-group">
+            <label class="form-label">Eyebrow Label</label>
+            {{ form.eyebrow }}
+            <div class="form-help">Small uppercase text above the heading (e.g. "NEW COLLECTION")</div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label form-label-required">Heading</label>
+            {{ form.heading }}
+            <div class="form-help">Use \n for a line break. e.g. "Timeless Elegance,\nCrafted to Shine"</div>
+            {% if form.heading.errors %}<div class="form-error">{{ form.heading.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Subtitle</label>
+            {{ form.subtitle }}
+        </div>
+
+        <div class="section-divider">Feature Pills</div>
+        {% for i in "123" %}
+        {% with pill_field=form|dictsort:i %}{% endwith %}
+        {% endfor %}
+        <!-- Pill rows -->
+        <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:4px;">
+            {% for n in "123" %}
+            <div>
+                <div style="display:grid;grid-template-columns:1fr 160px;gap:12px;align-items:end;">
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label class="form-label">Pill {{ n }} Text</label>
+                        {% if n == "1" %}{{ form.pill_1 }}{% elif n == "2" %}{{ form.pill_2 }}{% else %}{{ form.pill_3 }}{% endif %}
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label class="form-label">Icon</label>
+                        {% if n == "1" %}{{ form.pill_1_icon }}{% elif n == "2" %}{{ form.pill_2_icon }}{% else %}{{ form.pill_3_icon }}{% endif %}
+                    </div>
+                </div>
+                <div class="pill-custom-row" id="pill{{ n }}CustomRow"
+                     style="margin-top:10px;background:#f9f9f9;border:1px solid #e8e8e8;border-radius:10px;padding:14px;{% if n == "1" and form.instance.pill_1_icon != 'custom' %}display:none;{% elif n == "2" and form.instance.pill_2_icon != 'custom' %}display:none;{% elif n == "3" and form.instance.pill_3_icon != 'custom' %}display:none;{% endif %}">
+
+                    <!-- Tab switcher -->
+                    <div style="display:flex;margin-bottom:12px;border:1px solid #ddd;border-radius:7px;overflow:hidden;width:fit-content;">
+                        <button type="button" id="pill{{ n }}TabPaste"
+                                onclick="svgTabSwitch('{{ n }}','paste')"
+                                style="padding:6px 16px;border:none;background:#fff;font-size:0.8rem;font-weight:600;cursor:pointer;color:#1a1a1a;border-right:1px solid #ddd;">
+                            ✏ Paste SVG
+                        </button>
+                        <button type="button" id="pill{{ n }}TabUpload"
+                                onclick="svgTabSwitch('{{ n }}','upload')"
+                                style="padding:6px 16px;border:none;background:#f5f5f5;font-size:0.8rem;font-weight:600;cursor:pointer;color:#888;">
+                            ⬆ Upload .svg file
+                        </button>
+                    </div>
+
+                    <!-- Paste tab -->
+                    <div id="pill{{ n }}PastePane">
+                        <label class="form-label" style="margin-bottom:4px;">Inner SVG markup</label>
+                        {% if n == "1" %}{{ form.pill_1_icon_custom }}{% elif n == "2" %}{{ form.pill_2_icon_custom }}{% else %}{{ form.pill_3_icon_custom }}{% endif %}
+                        <div class="form-help" style="margin-top:4px;">
+                            Paste only the inner elements — <code>&lt;path&gt;</code>, <code>&lt;circle&gt;</code>, <code>&lt;polyline&gt;</code> etc. The outer <code>&lt;svg&gt;</code> wrapper is added automatically.<br>
+                            Tip: <a href="https://lucide.dev/icons/" target="_blank" rel="noopener">lucide.dev</a> — find icon → Copy SVG → remove the outer <code>&lt;svg ...&gt;&lt;/svg&gt;</code> tags, paste just the inner markup.
+                        </div>
+                    </div>
+
+                    <!-- Upload tab -->
+                    <div id="pill{{ n }}UploadPane" style="display:none;">
+                        <label class="form-label" style="margin-bottom:4px;">Upload an SVG file from your device</label>
+                        <input type="file" id="pill{{ n }}SvgFile" accept=".svg,image/svg+xml"
+                               class="form-input" style="padding:6px;"
+                               onchange="svgFileLoad('{{ n }}', this)">
+                        <div class="form-help" style="margin-top:4px;">
+                            Pick any <code>.svg</code> file. The inner markup is extracted automatically and placed into the field.
+                            The file is <strong>not</strong> uploaded to the server — only its path data is stored as text.
+                        </div>
+                        <div id="pill{{ n }}UploadStatus" style="margin-top:6px;font-size:0.8rem;color:#27ae60;"></div>
+                    </div>
+
+                    <!-- Live preview -->
+                    <div style="margin-top:12px;display:flex;align-items:center;gap:10px;padding-top:10px;border-top:1px solid #eee;">
+                        <svg id="pill{{ n }}CustomPreviewSvg" width="22" height="22"
+                             fill="none" stroke="{{ form.instance.pill_icon_color|default:'#c9a96e' }}"
+                             stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;"></svg>
+                        <span style="font-size:0.78rem;color:#aaa;" id="pill{{ n }}CustomPreviewMsg">Preview appears here</span>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Pill colours -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+            <div class="color-field">
+                <label>Pill Text Colour</label>
+                {{ form.pill_text_color }}
+            </div>
+            <div class="color-field">
+                <label>Pill Icon Colour</label>
+                {{ form.pill_icon_color }}
+            </div>
+        </div>
+
+        <div class="section-divider">Call to Action Buttons</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div class="form-group">
+                <label class="form-label">Primary Button Text</label>
+                {{ form.cta_primary_text }}
+            </div>
+            <div class="form-group">
+                <label class="form-label">Primary Button URL</label>
+                {{ form.cta_primary_url }}
+            </div>
+            <div class="form-group">
+                <label class="form-label">Secondary Button Text</label>
+                {{ form.cta_secondary_text }}
+            </div>
+            <div class="form-group">
+                <label class="form-label">Secondary Button URL</label>
+                {{ form.cta_secondary_url }}
+            </div>
+        </div>
+        <!-- Button colours -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-top:4px;">
+
+            <!-- Primary BG — colour + transparent toggle -->
+            <div class="color-field">
+                <label>Primary BG</label>
+                <div class="color-or-transparent-wrap" id="wrap_btn_primary_bg">
+                    <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">
+                        <input type="color" id="picker_btn_primary_bg"
+                               value="{% if form.instance.btn_primary_bg and form.instance.btn_primary_bg != 'transparent' %}{{ form.instance.btn_primary_bg }}{% else %}#1a1a1a{% endif %}"
+                               style="height:34px;width:44px;padding:2px 4px;border:1px solid #ddd;border-radius:6px;cursor:pointer;flex-shrink:0;"
+                               oninput="syncColorPicker('btn_primary_bg', this.value)">
+                        {{ form.btn_primary_bg }}
+                    </div>
+                    <button type="button" class="transparent-btn {% if form.instance.btn_primary_bg == 'transparent' %}active{% endif %}" id="transbtn_btn_primary_bg"
+                            onclick="setTransparent('btn_primary_bg')">
+                        {% if form.instance.btn_primary_bg == 'transparent' %}◼ Clear Transparent{% else %}◻ Set Transparent{% endif %}
+                    </button>
+                </div>
+            </div>
+
+            <!-- Primary Text -->
+            <div class="color-field">
+                <label>Primary Text</label>
+                {{ form.btn_primary_text_color }}
+            </div>
+
+            <!-- Secondary BG — colour + transparent toggle -->
+            <div class="color-field">
+                <label>Secondary BG</label>
+                <div class="color-or-transparent-wrap" id="wrap_btn_secondary_bg">
+                    <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">
+                        <input type="color" id="picker_btn_secondary_bg"
+                               value="{% if form.instance.btn_secondary_bg and form.instance.btn_secondary_bg != 'transparent' %}{{ form.instance.btn_secondary_bg }}{% else %}#ffffff{% endif %}"
+                               style="height:34px;width:44px;padding:2px 4px;border:1px solid #ddd;border-radius:6px;cursor:pointer;flex-shrink:0;"
+                               oninput="syncColorPicker('btn_secondary_bg', this.value)">
+                        {{ form.btn_secondary_bg }}
+                    </div>
+                    <button type="button" class="transparent-btn {% if form.instance.btn_secondary_bg == 'transparent' %}active{% endif %}" id="transbtn_btn_secondary_bg"
+                            onclick="setTransparent('btn_secondary_bg')">
+                        {% if form.instance.btn_secondary_bg == 'transparent' %}◼ Clear Transparent{% else %}◻ Set Transparent{% endif %}
+                    </button>
+                </div>
+            </div>
+
+            <!-- Secondary Text / Border -->
+            <div class="color-field">
+                <label>Secondary Text / Border</label>
+                {{ form.btn_secondary_text_color }}
+            </div>
+
+        </div>
+
+        <div class="section-divider">Typography Colours</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="color-field">
+                <label>Eyebrow Colour</label>
+                {{ form.eyebrow_color }}
+            </div>
+            <div class="color-field">
+                <label>Heading Colour</label>
+                {{ form.heading_color }}
+            </div>
+            <div class="color-field">
+                <label>Subtitle Colour</label>
+                {{ form.subtitle_color }}
+            </div>
+        </div>
+
+        <div class="section-divider">Visual</div>
+
+        <div style="display:grid; grid-template-columns:160px 1fr; gap:16px; align-items:start;">
+            <div class="form-group">
+                <label class="form-label">Background Colour</label>
+                {{ form.bg_color }}
+                <div class="form-help">Left panel colour (used when no bg image)</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Colour Scheme</label>
+                {{ form.color_scheme }}
+                <div class="form-help">Light = dark text &nbsp;|&nbsp; Dark = white text</div>
+            </div>
+        </div>
+
+        <!-- Background image (full-hero) -->
+        <div class="card" style="background:var(--gray-light);padding:16px;margin-bottom:16px;">
+            <div style="font-weight:600;margin-bottom:12px;font-size:0.9rem;">Full-Hero Background Image <span style="font-weight:400;color:#aaa;">(optional — covers the whole banner)</span></div>
+
+            {% if form.instance.pk and form.instance.get_bg_image_url %}
+            <div style="display:flex;align-items:center;gap:16px;padding:12px;background:#fff;border-radius:8px;border:1px solid var(--gray-medium);margin-bottom:14px;">
+                <img src="{{ form.instance.get_bg_image_url }}" style="height:70px;width:110px;object-fit:cover;border-radius:6px;flex-shrink:0;">
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:0.82rem;font-weight:600;color:#333;margin-bottom:2px;">Current background image</div>
+                    <div style="font-size:0.75rem;color:#aaa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                        {% if form.instance.bg_image %}{{ form.instance.bg_image.name }}{% else %}{{ form.instance.bg_image_url|truncatechars:60 }}{% endif %}
+                    </div>
+                </div>
+                <button type="button" class="btn btn-danger" style="padding:7px 14px;font-size:0.82rem;flex-shrink:0;"
+                        onclick="confirmClearImage('bg')">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right:4px;vertical-align:middle;"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    Delete image
+                </button>
+            </div>
+            {% endif %}
+
+            <div class="form-group">
+                <label class="form-label">{% if form.instance.get_bg_image_url %}Replace with URL{% else %}Background Image URL{% endif %}</label>
+                {{ form.bg_image_url }}
+                {% if form.bg_image_url.errors %}<div class="form-error">{{ form.bg_image_url.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">{% if form.instance.get_bg_image_url %}Replace with Upload{% else %}Upload Background Image{% endif %}</label>
+                {{ form.bg_image }}
+            </div>
+        </div>
+
+        <!-- Side image -->
+        <div class="card" style="background:var(--gray-light);padding:16px;margin-bottom:16px;">
+            <div style="font-weight:600;margin-bottom:12px;font-size:0.9rem;">Right-Side Image <span style="font-weight:400;color:#aaa;">(optional — shown on the right half)</span></div>
+
+            {% if form.instance.pk and form.instance.get_image_url %}
+            <div style="display:flex;align-items:center;gap:16px;padding:12px;background:#fff;border-radius:8px;border:1px solid var(--gray-medium);margin-bottom:14px;">
+                <img src="{{ form.instance.get_image_url }}" style="height:70px;width:70px;object-fit:cover;border-radius:6px;flex-shrink:0;">
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:0.82rem;font-weight:600;color:#333;margin-bottom:2px;">Current side image</div>
+                    <div style="font-size:0.75rem;color:#aaa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                        {% if form.instance.image %}{{ form.instance.image.name }}{% else %}{{ form.instance.image_url|truncatechars:60 }}{% endif %}
+                    </div>
+                </div>
+                <button type="button" class="btn btn-danger" style="padding:7px 14px;font-size:0.82rem;flex-shrink:0;"
+                        onclick="confirmClearImage('side')">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right:4px;vertical-align:middle;"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    Delete image
+                </button>
+            </div>
+            {% endif %}
+
+            <div class="form-group">
+                <label class="form-label">{% if form.instance.get_image_url %}Replace with URL{% else %}Side Image URL{% endif %}</label>
+                {{ form.image_url }}
+                {% if form.image_url.errors %}<div class="form-error">{{ form.image_url.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label">{% if form.instance.get_image_url %}Replace with Upload{% else %}Upload Side Image{% endif %}</label>
+                {{ form.image }}
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    {{ form.hide_side_image }}
+                    <span class="form-label" style="margin-bottom:0;">Hide side image (full-width content layout)</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="section-divider">Settings</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+            <div class="form-group">
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                    {{ form.is_active }}
+                    <span class="form-label" style="margin-bottom:0;">Active</span>
+                </label>
+                <div class="form-help">Only the lowest-order active banner is shown on the site.</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Display Order</label>
+                {{ form.order }}
+                <div class="form-help">Lower = higher priority</div>
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">{{ action }} Banner</button>
+            <a href="{% url 'myadmin:hero_list' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+
+{% if form.instance.pk %}
+<!-- Standalone clear-image form (outside the banner form to avoid nested form issue) -->
+<form id="clearImageForm" method="post" action="{% url 'myadmin:hero_clear_image' form.instance.pk %}" style="display:none;">
+    {% csrf_token %}
+    <input type="hidden" name="field" id="clearImageField" value="">
+</form>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── SVG paths for each icon key ─────────────────────────────────────────────
+const ICON_PATHS = {
+    check:   '<polyline points="20 6 9 17 4 12"/>',
+    shield:  '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+    star:    '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+    heart:   '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>',
+    leaf:    '<path d="M2 22c1.25-1.25 2.44-2.44 3.5-3.5M21 3C21 3 7 4 4 14c-.44 1.32-.16 2.72.72 3.72 1.04 1.16 2.68 1.44 3.97.68C9.75 17.59 12 15 12 15s-1 4 3 5c4 1 6-5 6-5s1 4 0 7"/>',
+    diamond: '<polygon points="12 2 22 12 12 22 2 12"/>',
+    droplet: '<path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>',
+    circle:  '<circle cx="12" cy="12" r="10"/>',
+};
+
+function setIconSvg(svgEl, iconKey, customPath) {
+    if (iconKey === 'custom') {
+        svgEl.innerHTML = customPath || '';
+    } else {
+        svgEl.innerHTML = ICON_PATHS[iconKey] || ICON_PATHS['check'];
+    }
+}
+
+// ── Per-pill setup ────────────────────────────────────────────────────────────
+['1','2','3'].forEach(n => {
+    const select      = document.getElementById(`id_pill_${n}_icon`);
+    const customInput = document.getElementById(`id_pill_${n}_icon_custom`);
+    const customRow   = document.getElementById(`pill${n}CustomRow`);
+    const previewSvg  = document.getElementById(`prevPill${n}Icon`);
+    const customPrev  = document.getElementById(`pill${n}CustomPreviewSvg`);
+    const customMsg   = document.getElementById(`pill${n}CustomPreviewMsg`);
+
+    if (!select) return;
+
+    function applyIcon() {
+        const val    = select.value;
+        const custom = customInput ? customInput.value.trim() : '';
+        if (customRow) customRow.style.display = val === 'custom' ? 'block' : 'none';
+        if (previewSvg) setIconSvg(previewSvg, val, custom);
+    }
+
+    function applyCustomPreview() {
+        const raw = customInput ? customInput.value.trim() : '';
+        if (!customPrev) return;
+        customPrev.innerHTML = raw;
+        if (customMsg) customMsg.textContent = raw ? '✓ Preview above' : 'Paste SVG markup or upload a file';
+        if (previewSvg && select.value === 'custom') previewSvg.innerHTML = raw;
+    }
+
+    applyIcon();
+    if (customInput && select.value === 'custom') applyCustomPreview();
+
+    select.addEventListener('change', applyIcon);
+    if (customInput) customInput.addEventListener('input', applyCustomPreview);
+});
+
+// ── Tab switcher for Paste / Upload ──────────────────────────────────────────
+function svgTabSwitch(n, tab) {
+    const pastePane  = document.getElementById(`pill${n}PastePane`);
+    const uploadPane = document.getElementById(`pill${n}UploadPane`);
+    const pasteBtn   = document.getElementById(`pill${n}TabPaste`);
+    const uploadBtn  = document.getElementById(`pill${n}TabUpload`);
+
+    const isUpload = tab === 'upload';
+    pastePane.style.display  = isUpload ? 'none' : 'block';
+    uploadPane.style.display = isUpload ? 'block' : 'none';
+
+    // Active tab styles
+    pasteBtn.style.background  = isUpload ? '#f5f5f5' : '#fff';
+    pasteBtn.style.color       = isUpload ? '#888' : '#1a1a1a';
+    uploadBtn.style.background = isUpload ? '#fff' : '#f5f5f5';
+    uploadBtn.style.color      = isUpload ? '#1a1a1a' : '#888';
+}
+
+// ── SVG file upload — extract inner markup client-side ────────────────────────
+function svgFileLoad(n, input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const statusEl = document.getElementById(`pill${n}UploadStatus`);
+    const textField = document.getElementById(`id_pill_${n}_icon_custom`);
+    const previewSvg = document.getElementById(`pill${n}CustomPreviewSvg`);
+    const mainPreview = document.getElementById(`prevPill${n}Icon`);
+    const customMsg  = document.getElementById(`pill${n}CustomPreviewMsg`);
+
+    if (!file.name.toLowerCase().endsWith('.svg') && file.type !== 'image/svg+xml') {
+        if (statusEl) { statusEl.textContent = '✗ Please select an SVG file.'; statusEl.style.color = '#c0392b'; }
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const raw = e.target.result;
+            // Parse the SVG and extract inner content
+            const parser = new DOMParser();
+            const doc    = parser.parseFromString(raw, 'image/svg+xml');
+            const svgEl  = doc.querySelector('svg');
+
+            if (!svgEl) throw new Error('No <svg> element found');
+
+            // Check for parse errors
+            if (doc.querySelector('parsererror')) throw new Error('Invalid SVG file');
+
+            // Grab inner HTML — strip any <title> / <desc> / <style> blocks
+            Array.from(svgEl.querySelectorAll('title,desc,defs,style')).forEach(el => el.remove());
+            const innerMarkup = svgEl.innerHTML.trim();
+
+            if (!innerMarkup) throw new Error('SVG file appears to be empty');
+
+            // Populate the text field
+            if (textField) {
+                textField.value = innerMarkup;
+                textField.dispatchEvent(new Event('input'));   // trigger live preview
+            }
+
+            if (statusEl) {
+                statusEl.textContent = `✓ Loaded "${file.name}" — inner markup extracted.`;
+                statusEl.style.color = '#27ae60';
+            }
+            // Switch back to paste tab so they can see / edit the extracted markup
+            svgTabSwitch(n, 'paste');
+        } catch (err) {
+            if (statusEl) {
+                statusEl.textContent = `✗ Could not read SVG: ${err.message}`;
+                statusEl.style.color = '#c0392b';
+            }
+        }
+    };
+    reader.readAsText(file);
+}
+
+// ── Generic preview binder ──────────────────────────────────────────────────
+function bindPreview(fieldId, previewId, transform) {
+    const el = document.getElementById(fieldId);
+    if (!el) return;
+    el.addEventListener('input', () => {
+        const target = document.getElementById(previewId);
+        if (target) target.textContent = transform ? transform(el.value) : el.value;
+    });
+}
+
+bindPreview('id_eyebrow',           'prevEyebrow');
+bindPreview('id_subtitle',          'prevSubtitle');
+bindPreview('id_pill_1',            'prevPill1');
+bindPreview('id_pill_2',            'prevPill2');
+bindPreview('id_pill_3',            'prevPill3');
+bindPreview('id_cta_primary_text',  'prevCta1');
+bindPreview('id_cta_secondary_text','prevCta2');
+
+// Heading with \n -> <br>
+const headingEl = document.getElementById('id_heading');
+if (headingEl) {
+    headingEl.addEventListener('input', () => {
+        document.getElementById('prevHeading').innerHTML =
+            headingEl.value.replace(/\\n/g, '<br>').replace(/\n/g, '<br>');
+    });
+}
+
+// ── Colour pickers → live preview ──────────────────────────────────────────
+function bindColor(fieldId, apply) {
+    const el = document.getElementById(fieldId);
+    if (!el) return;
+    el.addEventListener('input', () => apply(el.value));
+}
+
+bindColor('id_eyebrow_color',  v => document.getElementById('prevEyebrow').style.color = v);
+bindColor('id_heading_color',  v => document.getElementById('prevHeading').style.color = v);
+bindColor('id_subtitle_color', v => document.getElementById('prevSubtitle').style.color = v);
+
+bindColor('id_pill_text_color', v => {
+    ['prevPill1','prevPill2','prevPill3'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.color = v;
+    });
+});
+bindColor('id_pill_icon_color', v => {
+    ['prevPill1Icon','prevPill2Icon','prevPill3Icon'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.setAttribute('stroke', v);
+    });
+});
+
+// ── Transparent button BG controls ──────────────────────────────────────────
+function syncColorPicker(fieldName, colorValue) {
+    const textInput = document.getElementById('id_' + fieldName);
+    if (textInput) {
+        textInput.value = colorValue;
+        textInput.dispatchEvent(new Event('input'));
+    }
+    const transBtn = document.getElementById('transbtn_' + fieldName);
+    if (transBtn) transBtn.classList.remove('active');
+    const picker = document.getElementById('picker_' + fieldName);
+    if (picker) { picker.style.opacity = '1'; picker.style.pointerEvents = 'auto'; }
+}
+
+function setTransparent(fieldName) {
+    const textInput = document.getElementById('id_' + fieldName);
+    const transBtn = document.getElementById('transbtn_' + fieldName);
+    const picker = document.getElementById('picker_' + fieldName);
+    
+    // Toggle: if already transparent, revert to default color
+    const currentVal = textInput.value.trim().toLowerCase();
+    let defaultColor;
+    
+    if (fieldName === 'btn_primary_bg') {
+        defaultColor = '#1a1a1a';
+    } else if (fieldName === 'btn_secondary_bg') {
+        defaultColor = '#ffffff';
+    }
+    
+    if (currentVal === 'transparent' && transBtn && transBtn.classList.contains('active')) {
+        // Revert to default color (undo transparent)
+        textInput.value = defaultColor;
+        if (transBtn) transBtn.classList.remove('active');
+        if (picker) { picker.style.opacity = '1'; picker.style.pointerEvents = 'auto'; }
+    } else {
+        // Set to transparent
+        textInput.value = 'transparent';
+        if (transBtn) transBtn.classList.add('active');
+        if (picker) { picker.style.opacity = '0.3'; picker.style.pointerEvents = 'none'; }
+    }
+    textInput.dispatchEvent(new Event('input'));
+}
+
+// Initialise transparent button state on page load
+['btn_primary_bg', 'btn_secondary_bg'].forEach(fieldName => {
+    const textInput = document.getElementById('id_' + fieldName);
+    const picker    = document.getElementById('picker_' + fieldName);
+    const transBtn  = document.getElementById('transbtn_' + fieldName);
+    if (!textInput) return;
+
+    const currentVal = textInput.value.trim().toLowerCase();
+    
+    // Set defaults if empty
+    let defaultColor;
+    if (fieldName === 'btn_primary_bg') {
+        defaultColor = '#1a1a1a';
+    } else if (fieldName === 'btn_secondary_bg') {
+        defaultColor = '#ffffff';
+    }
+    
+    if (!currentVal || currentVal === 'transparent') {
+        // Use default color if transparent or empty
+        textInput.value = defaultColor;
+        if (transBtn) transBtn.classList.remove('active');
+        if (picker) { picker.style.opacity = '1'; picker.style.pointerEvents = 'auto'; picker.value = defaultColor; }
+    } else if (picker && currentVal.startsWith('#') && currentVal.length >= 4) {
+        picker.value = currentVal;
+        picker.style.opacity = '1'; picker.style.pointerEvents = 'auto';
+        if (transBtn) transBtn.classList.remove('active');
+    }
+
+    textInput.addEventListener('input', () => {
+        const v = textInput.value.trim().toLowerCase();
+        if (v === 'transparent') {
+            if (transBtn) transBtn.classList.add('active');
+            if (picker) { picker.style.opacity = '0.3'; picker.style.pointerEvents = 'none'; }
+        } else {
+            if (transBtn) transBtn.classList.remove('active');
+            if (picker) { picker.style.opacity = '1'; picker.style.pointerEvents = 'auto'; }
+            if (picker && v.startsWith('#') && (v.length === 4 || v.length === 7)) {
+                picker.value = v;
+            }
+        }
+    });
+});
+
+bindColor('id_btn_primary_bg',         v => document.getElementById('prevCta1').style.background = v);
+bindColor('id_btn_primary_text_color', v => document.getElementById('prevCta1').style.color = v);
+bindColor('id_btn_secondary_bg',       v => document.getElementById('prevCta2').style.background = v);
+bindColor('id_btn_secondary_text_color', v => {
+    const el = document.getElementById('prevCta2');
+    if (el) { el.style.color = v; el.style.borderColor = v; }
+});
+
+// Background colour
+const bgEl = document.getElementById('id_bg_color');
+if (bgEl) {
+    bgEl.addEventListener('input', () => {
+        const bgImg = document.getElementById('id_bg_image_url');
+        if (!bgImg || !bgImg.value.trim()) {
+            document.getElementById('prevLeft').style.background = bgEl.value;
+            document.getElementById('heroPreview').style.background = bgEl.value;
+        }
+    });
+}
+
+// Background image URL
+const bgImgEl = document.getElementById('id_bg_image_url');
+if (bgImgEl) {
+    bgImgEl.addEventListener('input', () => {
+        const url = bgImgEl.value.trim();
+        const preview = document.getElementById('heroPreview');
+        if (url) {
+            preview.style.backgroundImage = `url('${url}')`;
+            preview.style.backgroundSize = 'cover';
+            preview.style.backgroundPosition = 'center';
+            preview.style.backgroundRepeat = 'no-repeat';
+        } else {
+            preview.style.backgroundImage = '';
+        }
+    });
+}
+
+// Hide side image toggle
+const hideEl = document.getElementById('id_hide_side_image');
+if (hideEl) {
+    hideEl.addEventListener('change', () => {
+        document.getElementById('prevRight').style.display = hideEl.checked ? 'none' : '';
+        document.getElementById('heroPreview').style.gridTemplateColumns = hideEl.checked ? '1fr' : '1fr 1fr';
+    });
+}
+
+// Colour scheme
+const schemeEl = document.getElementById('id_color_scheme');
+if (schemeEl) {
+    schemeEl.addEventListener('change', () => {
+        const isDark = schemeEl.value === 'dark';
+        document.getElementById('prevLeft').style.color = isDark ? '#fff' : '#1a1a1a';
+    });
+}
+
+// Side image URL preview
+const imgUrlEl = document.getElementById('id_image_url');
+if (imgUrlEl) {
+    imgUrlEl.addEventListener('input', () => {
+        const url = imgUrlEl.value.trim();
+        const right = document.getElementById('prevRight');
+        right.innerHTML = url
+            ? `<img src="${url}" style="width:100%;height:100%;object-fit:cover;">`
+            : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#ccc;font-size:0.85rem;">Image preview</div>`;
+    });
+}
+
+// ── Clear image confirmation ────────────────────────────────────────────────
+function confirmClearImage(field) {
+    const label = field === 'bg' ? 'background image' : 'side image';
+    if (!confirm(`Remove the ${label}? This cannot be undone.`)) return;
+    const form = document.getElementById('clearImageForm');
+    if (!form) return;
+    document.getElementById('clearImageField').value = field;
+    form.submit();
+}
+</script>
+{% endblock %}

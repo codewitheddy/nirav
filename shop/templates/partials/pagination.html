@@ -1,0 +1,30 @@
+{% if products.has_other_pages %}
+<div class="pagination-info">
+    Showing {{ products.start_index }} - {{ products.end_index }} of {{ products.paginator.count }} products
+</div>
+<div class="pagination">
+    {% if products.has_previous %}
+        <a href="#" data-page="1" class="pagination-link" title="First Page">⟪</a>
+        <a href="#" data-page="{{ products.previous_page_number }}" class="pagination-link" title="Previous Page">‹</a>
+    {% else %}
+        <span class="disabled">⟪</span>
+        <span class="disabled">‹</span>
+    {% endif %}
+    
+    {% for num in products.paginator.page_range %}
+        {% if products.number == num %}
+            <span class="current">{{ num }}</span>
+        {% elif num > products.number|add:'-3' and num < products.number|add:'3' %}
+            <a href="#" data-page="{{ num }}" class="pagination-link">{{ num }}</a>
+        {% endif %}
+    {% endfor %}
+    
+    {% if products.has_next %}
+        <a href="#" data-page="{{ products.next_page_number }}" class="pagination-link" title="Next Page">›</a>
+        <a href="#" data-page="{{ products.paginator.num_pages }}" class="pagination-link" title="Last Page">⟫</a>
+    {% else %}
+        <span class="disabled">›</span>
+        <span class="disabled">⟫</span>
+    {% endif %}
+</div>
+{% endif %}

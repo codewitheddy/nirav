@@ -1,0 +1,131 @@
+# Files to Upload to cPanel
+# Generated for deployment preparation
+
+## Core Files (REQUIRED)
+[x] manage.py
+[x] passenger_wsgi.py
+[x] requirements.txt
+[x] runtime.txt
+[x] .htaccess
+[x] robots.txt
+[x] .env.example
+[x] .gitignore
+
+## Directories (REQUIRED)
+[x] jewellery_site/
+[x] shop/
+[x] static/
+
+## Essential Documentation (OPTIONAL but recommended)
+[x] README.md
+[x] DEPLOYMENT_README.md
+[x] CPANEL_DEPLOYMENT_READY.md
+[x] POSTGRESQL_SETUP_GUIDE.md
+[x] PRE_DEPLOYMENT_CHECKLIST.md
+
+## Deployment Tools (OPTIONAL)
+[x] verify_deployment_ready.py
+[x] deploy_to_cpanel.sh
+[x] setup_postgresql.sh
+
+## Do NOT Upload
+[ ] .env (create on server with actual values)
+[ ] .git/ (version control - not needed on server)
+[ ] .kiro/ (development tools)
+[ ] docs/ (moved documentation - optional)
+[ ] venv/ (virtual environment - create on server)
+[ ] env/ (virtual environment)
+[ ] __pycache__/ (Python cache - auto-generated)
+[ ] *.pyc (compiled Python - auto-generated)
+[ ] *.pyo (compiled Python - auto-generated)
+[ ] *.log (log files)
+[ ] db.sqlite3 (local database - use PostgreSQL on server)
+[ ] .DS_Store (Mac files)
+[ ] Thumbs.db (Windows files)
+
+## Upload Methods
+
+### Method 1: Git (Recommended)
+```bash
+# On cPanel via SSH
+cd ~/jewellery_site
+git clone https://github.com/yourusername/your-repo.git .
+```
+
+### Method 2: ZIP Upload
+```bash
+# Create ZIP locally (exclude unnecessary files)
+# Upload via cPanel File Manager
+# Extract in application directory
+```
+
+### Method 3: FTP/SFTP
+```
+# Use FileZilla or similar
+# Upload all required files and directories
+# Maintain directory structure
+```
+
+## File Structure on Server
+
+jewellery_site/
+├── manage.py
+├── passenger_wsgi.py
+├── requirements.txt
+├── runtime.txt
+├── .htaccess
+├── robots.txt
+├── .env (create this)
+├── jewellery_site/
+│   ├── __init__.py
+│   ├── settings.py
+│   ├── urls.py
+│   ├── wsgi.py
+│   └── asgi.py
+├── shop/
+│   ├── migrations/
+│   ├── management/
+│   ├── templates/
+│   ├── models.py
+│   ├── views.py
+│   ├── views_admin.py
+│   ├── forms_admin.py
+│   ├── urls.py
+│   └── urls_admin.py
+├── static/
+│   ├── myadmin/
+│   ├── images/
+│   └── admin/
+└── staticfiles/ (created by collectstatic)
+
+## Verification After Upload
+
+1. Check all files uploaded:
+   ls -la ~/jewellery_site/
+
+2. Verify directory structure:
+   tree ~/jewellery_site/ -L 2
+
+3. Check file permissions:
+   find ~/jewellery_site/ -type d -exec chmod 755 {} \;
+   find ~/jewellery_site/ -type f -exec chmod 644 {} \;
+
+4. Verify Python files:
+   python -m py_compile jewellery_site/settings.py
+
+## Next Steps After Upload
+
+1. Create .env file with production values
+2. Create PostgreSQL database
+3. Install dependencies: pip install -r requirements.txt
+4. Run migrations: python manage.py migrate
+5. Collect static files: python manage.py collectstatic --noinput
+6. Create superuser: python manage.py createsuperuser
+7. Test application
+8. Go live!
+
+---
+Total Required Files: ~50+
+Total Required Directories: 3 main + subdirectories
+Estimated Upload Size: ~5-10 MB (without media files)
+Estimated Upload Time: 2-5 minutes (depending on connection)

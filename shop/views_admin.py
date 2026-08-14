@@ -13,10 +13,18 @@ from django.utils import timezone
 from django.http import HttpResponse, JsonResponse
 from datetime import timedelta
 from decimal import Decimal
+import json
 import csv
 
-from .models import Product, Category, Order, OrderItem
-from .forms_admin import ProductForm, CategoryForm, OrderStatusForm
+from .models import (
+    Product, Category, Order, OrderItem, ProductVariant, Promotion, HeroBanner,
+    Attribute, AttributeValue, VariantAttributeValue,
+)
+from .forms_admin import ProductForm, CategoryForm, OrderStatusForm, ProductVariantFormSet, PromotionForm, HeroBannerForm
+from .cache_utils import cache_dashboard_kpis, get_top_products_cached, CacheManager
+
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
 
 
 # Authentication decorator
@@ -98,43 +106,42 @@ class DashboardView(TemplateView):
     """Main dashboard with KPIs and recent orders"""
     template_name = 'myadmin/dashboard.html'
     
+    @cache_dashboard_kpis()
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
-        # Calculate current month start
-        current_month = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        # Use cached KPIs if available
+        if hasattr(self.request, 'cached_kpis'):
+            cached_kpis = self.request.cached_kpis
+            context.update({
+                'total_revenue': cached_kpis['total_revenue'],
+                'total_orders': cached_kpis['total_orders'],
+                'total_customers': cached_kpis['total_customers'],
+                'total_products': cached_kpis['total_products'],
+            })
+        else:
+            # Fallback to direct calculation (shouldn't happen with caching)
+            current_month = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            
+            context.update({
+                'total_revenue': Order.objects.filter(
+                    created_at__gte=current_month,
+                    status__in=['confirmed', 'processing', 'shipped', 'delivered']
+                ).aggregate(Sum('total_amount'))['total_amount__sum'] or Decimal('0.00'),
+                'total_orders': Order.objects.filter(created_at__gte=current_month).count(),
+                'total_customers': Order.objects.values('customer_name').distinct().count(),
+                'total_products': Product.objects.filter(is_available=True).count(),
+            })
         
-        # Calculate KPIs
-        # Total revenue for current month (only confirmed and completed orders)
-        total_revenue = Order.objects.filter(
-            created_at__gte=current_month,
-            status__in=['confirmed', 'processing', 'shipped', 'delivered']
-        ).aggregate(Sum('total_amount'))['total_amount__sum'] or Decimal('0.00')
+        # Recent orders (last 10) - Optimized with select_related
+        recent_orders = Order.objects.select_related('promotion').order_by('-created_at')[:10]
         
-        # Total orders for current month
-        total_orders = Order.objects.filter(
-            created_at__gte=current_month
-        ).count()
-        
-        # Total unique customers (based on unique customer names)
-        total_customers = Order.objects.values('customer_name').distinct().count()
-        
-        # Total active products
-        total_products = Product.objects.filter(is_available=True).count()
-        
-        # Recent orders (last 10)
-        recent_orders = Order.objects.select_related().order_by('-created_at')[:10]
-        
-        # Order status distribution
+        # Order status distribution - No changes needed, already optimized
         status_distribution = Order.objects.values('status').annotate(
             count=Count('id')
         ).order_by('-count')
         
         context.update({
-            'total_revenue': total_revenue,
-            'total_orders': total_orders,
-            'total_customers': total_customers,
-            'total_products': total_products,
             'recent_orders': recent_orders,
             'status_distribution': status_distribution,
         })
@@ -152,7 +159,10 @@ class ProductListView(ListView):
     paginate_by = 20
     
     def get_queryset(self):
-        queryset = Product.objects.select_related('category').order_by('-created_at')
+        queryset = Product.objects.select_related('category').prefetch_related(
+            'variants',
+            'promotions'
+        ).order_by('-created_at')
         
         # Search functionality
         search_query = self.request.GET.get('search', '').strip()
@@ -192,11 +202,19 @@ class ProductCreateView(CreateView):
     form_class = ProductForm
     template_name = 'myadmin/products/add.html'
     success_url = reverse_lazy('myadmin:product_list')
-    
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Provide an empty formset for the management_form the template renders
+        context['variant_formset'] = ProductVariantFormSet()
+        return context
+
     def form_valid(self, form):
-        messages.success(self.request, f'Product "{form.instance.name}" created successfully!')
-        return super().form_valid(form)
-    
+        self.object = form.save()
+        messages.success(self.request, f'Product "{self.object.name}" created successfully!')
+        # Redirect straight to edit so merchant can add variants via the AJAX builder
+        return redirect('myadmin:product_edit', pk=self.object.pk)
+
     def form_invalid(self, form):
         messages.error(self.request, 'Please correct the errors below.')
         return super().form_invalid(form)
@@ -209,11 +227,59 @@ class ProductUpdateView(UpdateView):
     form_class = ProductForm
     template_name = 'myadmin/products/edit.html'
     success_url = reverse_lazy('myadmin:product_list')
-    
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Get the actual product instance from database (not unsaved form data)
+        product = self.get_object()
+        
+        if self.request.POST:
+            # Form submitted but invalid - use POST data with the existing product
+            context['variant_formset'] = ProductVariantFormSet(
+                self.request.POST, self.request.FILES, instance=product
+            )
+        else:
+            # Initial load - use existing product (has PK)
+            context['variant_formset'] = ProductVariantFormSet(instance=product)
+        return context
+
     def form_valid(self, form):
-        messages.success(self.request, f'Product "{form.instance.name}" updated successfully!')
-        return super().form_valid(form)
-    
+        # Save the product first to get a PK
+        self.object = form.save()
+        
+        # Reset all uploaded file pointers — form.save() may have consumed them,
+        # and the formset is about to validate the same request.FILES objects.
+        for file_obj in self.request.FILES.values():
+            try:
+                file_obj.seek(0)
+            except Exception:
+                pass
+        
+        # Now get the formset with the saved product instance
+        # Use POST data directly since we're in form_valid (form is already valid)
+        variant_formset = ProductVariantFormSet(
+            self.request.POST, self.request.FILES, instance=self.object
+        )
+        
+        if variant_formset.is_valid():
+            variant = variant_formset.save(commit=False)
+            # Ensure all variants have the product set
+            for v in variant:
+                if v.product_id is None:
+                    v.product = self.object
+                v.save()
+            # Handle deletions
+            for v in variant_formset.deleted_objects:
+                v.delete()
+            messages.success(self.request, f'Product "{self.object.name}" updated successfully!')
+        else:
+            # Formset has errors, re-render with errors
+            context = self.get_context_data()
+            context['variant_formset'] = variant_formset
+            return self.render_to_response(context)
+        
+        return redirect(self.success_url)
+
     def form_invalid(self, form):
         messages.error(self.request, 'Please correct the errors below.')
         return super().form_invalid(form)
@@ -289,7 +355,10 @@ class OrderListView(ListView):
     paginate_by = 20
     
     def get_queryset(self):
-        queryset = Order.objects.prefetch_related('items__product').order_by('-created_at')
+        queryset = Order.objects.select_related('promotion').prefetch_related(
+            'items__product',
+            'items__variant'
+        ).order_by('-created_at')
         
         # Search functionality
         search_query = self.request.GET.get('search', '').strip()
@@ -320,6 +389,69 @@ class OrderListView(ListView):
         context['date_from'] = self.request.GET.get('date_from', '')
         context['date_to'] = self.request.GET.get('date_to', '')
         return context
+
+
+@staff_required
+class OrderBulkActionView(View):
+    """
+    POST /myadmin/orders/bulk-action/
+    Performs a bulk action on a selected set of orders.
+
+    Actions:
+      mark_confirmed / mark_processing / mark_shipped /
+      mark_delivered / mark_cancelled  — change status
+      delete                           — delete orders (with confirmation guard)
+    """
+    VALID_STATUS_ACTIONS = {
+        'mark_confirmed':  'confirmed',
+        'mark_processing': 'processing',
+        'mark_shipped':    'shipped',
+        'mark_delivered':  'delivered',
+        'mark_cancelled':  'cancelled',
+    }
+
+    def post(self, request):
+        action  = request.POST.get('action', '').strip()
+        ids_raw = request.POST.getlist('order_ids')
+
+        if not ids_raw:
+            messages.warning(request, 'No orders selected.')
+            return redirect('myadmin:order_list')
+
+        try:
+            order_ids = [int(i) for i in ids_raw]
+        except (ValueError, TypeError):
+            messages.error(request, 'Invalid order selection.')
+            return redirect('myadmin:order_list')
+
+        orders = Order.objects.select_related('promotion').filter(pk__in=order_ids)
+        count  = orders.count()
+
+        if count == 0:
+            messages.warning(request, 'No matching orders found.')
+            return redirect('myadmin:order_list')
+
+        # ── Status change ─────────────────────────────────────────────
+        if action in self.VALID_STATUS_ACTIONS:
+            new_status = self.VALID_STATUS_ACTIONS[action]
+            orders.update(status=new_status)
+            label = dict(Order.STATUS_CHOICES).get(new_status, new_status).capitalize()
+            messages.success(request, f'{count} order(s) marked as {label}.')
+
+        # ── Delete ────────────────────────────────────────────────────
+        elif action == 'delete':
+            orders.delete()
+            messages.success(request, f'{count} order(s) deleted permanently.')
+
+        else:
+            messages.error(request, f'Unknown action: {action}')
+
+        # Preserve current filters when redirecting back
+        params = request.POST.get('return_params', '')
+        redirect_url = reverse_lazy('myadmin:order_list')
+        if params:
+            redirect_url = f'{redirect_url}?{params}'
+        return redirect(redirect_url)
 
 
 @staff_required
@@ -382,6 +514,7 @@ class CategoryListView(ListView):
     model = Category
     template_name = 'myadmin/categories/list.html'
     context_object_name = 'categories'
+    paginate_by = 20
     
     def get_queryset(self):
         return Category.objects.annotate(
@@ -458,8 +591,10 @@ class AnalyticsView(TemplateView):
         if self.request.GET.get('date_to'):
             date_to = timezone.datetime.strptime(self.request.GET.get('date_to'), '%Y-%m-%d').date()
         
-        # Filter orders by date range
-        orders = Order.objects.filter(created_at__date__range=[date_from, date_to])
+        # Filter orders by date range - Optimized with select_related
+        orders = Order.objects.select_related('promotion').filter(
+            created_at__date__range=[date_from, date_to]
+        )
         
         # Calculate metrics
         total_revenue = orders.filter(
@@ -472,19 +607,10 @@ class AnalyticsView(TemplateView):
             Avg('total_amount')
         )['total_amount__avg'] or Decimal('0.00')
         
-        # Top products by quantity
-        top_products_quantity = OrderItem.objects.filter(
-            order__created_at__date__range=[date_from, date_to]
-        ).values('product__name').annotate(
-            total_quantity=Sum('quantity')
-        ).order_by('-total_quantity')[:10]
-        
-        # Top products by revenue
-        top_products_revenue = OrderItem.objects.filter(
-            order__created_at__date__range=[date_from, date_to]
-        ).values('product__name').annotate(
-            total_revenue=Sum(F('quantity') * F('price'))
-        ).order_by('-total_revenue')[:10]
+        # Top products - Use cached version for better performance
+        top_products_data = get_top_products_cached(date_from, date_to)
+        top_products_quantity = top_products_data['quantity']
+        top_products_revenue = top_products_data['revenue']
         
         # Order status distribution
         order_status_distribution = orders.values('status').annotate(
@@ -526,7 +652,7 @@ class AnalyticsExportView(View):
         writer = csv.writer(response)
         writer.writerow(['Order Number', 'Customer', 'Total', 'Status', 'Date'])
         
-        orders = Order.objects.filter(
+        orders = Order.objects.select_related('promotion').filter(
             created_at__date__range=[date_from, date_to]
         ).order_by('-created_at')
         
@@ -554,7 +680,7 @@ class UserListView(ListView):
     
     def get_queryset(self):
         from django.contrib.auth.models import User
-        queryset = User.objects.filter(is_staff=True).order_by('-date_joined')
+        queryset = User.objects.filter(is_staff=True).select_related().order_by('-date_joined')
         
         # Search functionality
         search_query = self.request.GET.get('q', '').strip()
@@ -775,3 +901,502 @@ class UserDeleteView(View):
         
         messages.success(request, f'User "{username}" deleted successfully.')
         return redirect('myadmin:user_list')
+
+
+# ── Promotion Views ───────────────────────────────────────────────────────────
+
+@staff_required
+class PromotionListView(ListView):
+    model = Promotion
+    template_name = 'myadmin/promotions/list.html'
+    context_object_name = 'promotions'
+    paginate_by = 20
+
+    def get_queryset(self):
+        from django.utils import timezone as tz
+        qs = Promotion.objects.select_related('category').prefetch_related(
+            'products',
+            'variants'
+        ).order_by('-created_at')
+        now = tz.now()
+        # Annotate status for display
+        return qs
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        from django.utils import timezone as tz
+        ctx['now'] = tz.now()
+        return ctx
+
+
+@staff_required
+class PromotionCreateView(View):
+    template_name = 'myadmin/promotions/form.html'
+
+    def _variant_qs(self):
+        from .models import ProductVariant
+        return ProductVariant.objects.filter(is_available=True).select_related('product').prefetch_related(
+            'attribute_values__attribute_value__attribute'
+        ).order_by('product__name', 'size', 'color')
+
+    def get(self, request):
+        form = PromotionForm()
+        return render(request, self.template_name, {
+            'form': form,
+            'title': 'Create Promotion',
+            'action': 'Create',
+            'all_products': Product.objects.select_related('category').filter(is_available=True).order_by('category__name', 'name'),
+            'selected_product_ids': [],
+            'all_variants': self._variant_qs(),
+            'selected_variant_ids': [],
+        })
+
+    def post(self, request):
+        form = PromotionForm(request.POST)
+        if form.is_valid():
+            promo = form.save()
+            messages.success(request, f'Promotion "{promo.name}" created successfully.')
+            return redirect('myadmin:promotion_list')
+        selected_ids = [int(x) for x in request.POST.getlist('products') if x.isdigit()]
+        selected_variant_ids = [int(x) for x in request.POST.getlist('variants') if x.isdigit()]
+        return render(request, self.template_name, {
+            'form': form,
+            'title': 'Create Promotion',
+            'action': 'Create',
+            'all_products': Product.objects.select_related('category').filter(is_available=True).order_by('category__name', 'name'),
+            'selected_product_ids': selected_ids,
+            'all_variants': self._variant_qs(),
+            'selected_variant_ids': selected_variant_ids,
+        })
+
+
+@staff_required
+class PromotionUpdateView(View):
+    template_name = 'myadmin/promotions/form.html'
+
+    def _variant_qs(self):
+        from .models import ProductVariant
+        return ProductVariant.objects.filter(is_available=True).select_related('product').prefetch_related(
+            'attribute_values__attribute_value__attribute'
+        ).order_by('product__name', 'size', 'color')
+
+    def get(self, request, pk):
+        promo = get_object_or_404(Promotion, pk=pk)
+        form = PromotionForm(instance=promo)
+        selected_ids = list(promo.products.values_list('id', flat=True))
+        selected_variant_ids = list(promo.variants.values_list('id', flat=True))
+        return render(request, self.template_name, {
+            'form': form,
+            'promo': promo,
+            'title': f'Edit: {promo.name}',
+            'action': 'Update',
+            'all_products': Product.objects.select_related('category').filter(is_available=True).order_by('category__name', 'name'),
+            'selected_product_ids': selected_ids,
+            'all_variants': self._variant_qs(),
+            'selected_variant_ids': selected_variant_ids,
+        })
+
+    def post(self, request, pk):
+        promo = get_object_or_404(Promotion, pk=pk)
+        form = PromotionForm(request.POST, instance=promo)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f'Promotion "{promo.name}" updated.')
+            return redirect('myadmin:promotion_list')
+        selected_ids = [int(x) for x in request.POST.getlist('products') if x.isdigit()]
+        selected_variant_ids = [int(x) for x in request.POST.getlist('variants') if x.isdigit()]
+        return render(request, self.template_name, {
+            'form': form,
+            'promo': promo,
+            'title': f'Edit: {promo.name}',
+            'action': 'Update',
+            'all_products': Product.objects.select_related('category').filter(is_available=True).order_by('category__name', 'name'),
+            'selected_product_ids': selected_ids,
+            'all_variants': self._variant_qs(),
+            'selected_variant_ids': selected_variant_ids,
+        })
+
+
+@staff_required
+class PromotionDeleteView(View):
+    template_name = 'myadmin/promotions/delete_confirm.html'
+
+    def get(self, request, pk):
+        promo = get_object_or_404(Promotion, pk=pk)
+        return render(request, self.template_name, {'promo': promo})
+
+    def post(self, request, pk):
+        promo = get_object_or_404(Promotion, pk=pk)
+        name = promo.name
+        promo.delete()
+        messages.success(request, f'Promotion "{name}" deleted.')
+        return redirect('myadmin:promotion_list')
+
+
+@staff_required
+class PromotionToggleView(View):
+    """Quick-toggle active/inactive via POST."""
+
+    def post(self, request, pk):
+        promo = get_object_or_404(Promotion, pk=pk)
+        promo.is_active = not promo.is_active
+        promo.save(update_fields=['is_active'])
+        state = 'activated' if promo.is_active else 'deactivated'
+        messages.success(request, f'Promotion "{promo.name}" {state}.')
+        return redirect('myadmin:promotion_list')
+
+
+# ── Hero Banner Views ─────────────────────────────────────────────────────────
+
+@staff_required
+class HeroBannerListView(ListView):
+    model = HeroBanner
+    template_name = 'myadmin/hero/list.html'
+    context_object_name = 'banners'
+    paginate_by = 20
+    ordering = ['order', '-created_at']
+
+
+@staff_required
+class HeroBannerCreateView(View):
+    template_name = 'myadmin/hero/form.html'
+
+    def get(self, request):
+        form = HeroBannerForm()
+        return render(request, self.template_name, {'form': form, 'title': 'Create Banner', 'action': 'Create'})
+
+    def post(self, request):
+        form = HeroBannerForm(request.POST, request.FILES)
+        if form.is_valid():
+            banner = form.save()
+            messages.success(request, f'Banner "{banner}" created.')
+            return redirect('myadmin:hero_list')
+        return render(request, self.template_name, {'form': form, 'title': 'Create Banner', 'action': 'Create'})
+
+
+@staff_required
+class HeroBannerUpdateView(View):
+    template_name = 'myadmin/hero/form.html'
+
+    def get(self, request, pk):
+        banner = get_object_or_404(HeroBanner, pk=pk)
+        form = HeroBannerForm(instance=banner)
+        return render(request, self.template_name, {'form': form, 'banner': banner, 'title': 'Edit Banner', 'action': 'Update'})
+
+    def post(self, request, pk):
+        banner = get_object_or_404(HeroBanner, pk=pk)
+        form = HeroBannerForm(request.POST, request.FILES, instance=banner)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f'Banner updated.')
+            return redirect('myadmin:hero_list')
+        return render(request, self.template_name, {'form': form, 'banner': banner, 'title': 'Edit Banner', 'action': 'Update'})
+
+
+@staff_required
+class HeroBannerDeleteView(View):
+    template_name = 'myadmin/hero/delete_confirm.html'
+
+    def get(self, request, pk):
+        banner = get_object_or_404(HeroBanner, pk=pk)
+        return render(request, self.template_name, {'banner': banner})
+
+    def post(self, request, pk):
+        banner = get_object_or_404(HeroBanner, pk=pk)
+        banner.delete()
+        messages.success(request, 'Banner deleted.')
+        return redirect('myadmin:hero_list')
+
+
+@staff_required
+class HeroBannerToggleView(View):
+    def post(self, request, pk):
+        banner = get_object_or_404(HeroBanner, pk=pk)
+        banner.is_active = not banner.is_active
+        banner.save(update_fields=['is_active'])
+        state = 'activated' if banner.is_active else 'deactivated'
+        messages.success(request, f'Banner {state}.')
+        return redirect('myadmin:hero_list')
+
+
+@staff_required
+class HeroBannerClearImageView(View):
+    """Clears either the bg_image/bg_image_url or image/image_url from a banner."""
+
+    def post(self, request, pk):
+        import os
+        banner = get_object_or_404(HeroBanner, pk=pk)
+        field = request.POST.get('field')  # 'bg' or 'side'
+
+        if field == 'bg':
+            # Delete the uploaded file from disk if it exists
+            if banner.bg_image:
+                try:
+                    if os.path.isfile(banner.bg_image.path):
+                        os.remove(banner.bg_image.path)
+                except Exception:
+                    pass
+                banner.bg_image = None
+            banner.bg_image_url = ''
+            banner.save(update_fields=['bg_image', 'bg_image_url'])
+            messages.success(request, 'Background image removed.')
+
+        elif field == 'side':
+            if banner.image:
+                try:
+                    if os.path.isfile(banner.image.path):
+                        os.remove(banner.image.path)
+                except Exception:
+                    pass
+                banner.image = None
+            banner.image_url = ''
+            banner.save(update_fields=['image', 'image_url'])
+            messages.success(request, 'Side image removed.')
+
+        else:
+            messages.error(request, 'Unknown image field.')
+
+        return redirect('myadmin:hero_edit', pk=pk)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ── AJAX API Views for Attribute/Variant Management ──────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+
+@staff_required
+class UpdateProductStockView(View):
+    """
+    POST /myadmin/products/<pk>/stock/
+    Updates the stock field on a simple (non-variant) product.
+    Body: {"stock": 10}  or  {"stock": null} for unlimited
+    """
+    def post(self, request, pk):
+        product = get_object_or_404(Product, pk=pk)
+        try:
+            data = json.loads(request.body)
+            stock_val = data.get('stock')
+            product.stock = int(stock_val) if stock_val is not None else None
+            product.save(update_fields=['stock'])
+            return JsonResponse({'success': True, 'stock': product.stock})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+
+@staff_required
+class GetProductAttributesView(View):
+    """
+    GET /myadmin/products/<pk>/attributes/
+    Returns JSON list of attributes + values for a product.
+    """
+    def get(self, request, pk):
+        product = get_object_or_404(Product, pk=pk)
+        attrs = product.attributes.prefetch_related('values').order_by('position', 'id')
+        data = []
+        for attr in attrs:
+            data.append({
+                'id': attr.id,
+                'name': attr.name,
+                'position': attr.position,
+                'values': [
+                    {'id': v.id, 'value': v.value, 'position': v.position}
+                    for v in attr.values.all()
+                ],
+            })
+        return JsonResponse({'attributes': data})
+
+
+@staff_required
+class SaveProductAttributesView(View):
+    """
+    POST /myadmin/products/<pk>/attributes/save/
+    Saves the full attribute + value structure for a product.
+    Body: {"attributes": [{"name": "Color", "values": ["Red", "Blue"]}, ...]}
+    """
+    def post(self, request, pk):
+        product = get_object_or_404(Product, pk=pk)
+        try:
+            data = json.loads(request.body)
+            attributes_data = data.get('attributes', [])
+            
+            # Clear existing attributes (cascades to values)
+            product.attributes.all().delete()
+            
+            # Recreate
+            for pos, attr_dict in enumerate(attributes_data):
+                attr = Attribute.objects.create(
+                    product=product,
+                    name=attr_dict['name'].strip(),
+                    position=pos,
+                )
+                for vpos, val_str in enumerate(attr_dict.get('values', [])):
+                    if val_str.strip():
+                        AttributeValue.objects.create(
+                            attribute=attr,
+                            value=val_str.strip(),
+                            position=vpos,
+                        )
+            
+            return JsonResponse({'success': True})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+
+@staff_required
+class GenerateVariantsView(View):
+    """
+    POST /myadmin/products/<pk>/generate-variants/
+    Body: {"combinations": [[valueId1, valueId2], ...], "base_price": "1500"}
+    Generates ProductVariant rows and links them via VariantAttributeValue.
+    """
+    def post(self, request, pk):
+        product = get_object_or_404(Product, pk=pk)
+        try:
+            data = json.loads(request.body)
+            combinations = data.get('combinations', [])
+            base_price = Decimal(data.get('base_price', product.price))
+            
+            created_count = 0
+            for combo in combinations:
+                # combo is a list of AttributeValue IDs
+                if not combo:
+                    continue
+                
+                # Check if this exact combination already exists
+                # We'll do a simple approach: create the variant, then link it
+                variant = ProductVariant.objects.create(
+                    product=product,
+                    price=base_price,
+                    is_available=True,
+                )
+                
+                # Link attribute values
+                for av_id in combo:
+                    av = AttributeValue.objects.get(id=av_id)
+                    VariantAttributeValue.objects.create(
+                        variant=variant,
+                        attribute_value=av,
+                    )
+                
+                created_count += 1
+            
+            return JsonResponse({
+                'success': True,
+                'created_count': created_count,
+                'message': f'{created_count} variant(s) created',
+            })
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+
+@staff_required
+class GetProductVariantsView(View):
+    """
+    GET /myadmin/products/<pk>/variants/
+    Returns JSON list of all variants with their attributes.
+    """
+    def get(self, request, pk):
+        product = get_object_or_404(Product, pk=pk)
+        variants = product.variants.prefetch_related(
+            'attribute_values__attribute_value__attribute'
+        ).order_by('id')
+        
+        data = []
+        for v in variants:
+            # Build attribute dict
+            attrs = {}
+            for vav in v.attribute_values.select_related('attribute_value__attribute'):
+                attr_name = vav.attribute_value.attribute.name
+                attrs[attr_name] = vav.attribute_value.value
+            
+            data.append({
+                'id': v.id,
+                'sku': v.sku or '',
+                'display_name': v.display_name,
+                'attributes': attrs,
+                'price': str(v.price),
+                'cost_price': str(v.cost_price) if v.cost_price else '',
+                'stock': v.stock,
+                'weight': str(v.weight) if v.weight else '',
+                'image_url': v.image_url or '',
+                'image': v.image.url if v.image else '',
+                'is_available': v.is_available,
+                'stock_status': v.stock_status,
+            })
+        
+        return JsonResponse({'variants': data})
+
+
+@staff_required
+class UpdateVariantView(View):
+    """
+    POST /myadmin/variants/<pk>/update/
+    Updates a single variant's fields.
+    Body: {"sku": "...", "price": "...", "stock": ..., ...}
+    """
+    def post(self, request, pk):
+        variant = get_object_or_404(ProductVariant, pk=pk)
+        try:
+            data = json.loads(request.body)
+            
+            if 'sku' in data:
+                variant.sku = data['sku'].strip() or None
+            if 'price' in data:
+                variant.price = Decimal(data['price'])
+            if 'cost_price' in data:
+                val = data['cost_price'].strip()
+                variant.cost_price = Decimal(val) if val else None
+            if 'stock' in data:
+                val = data['stock']
+                variant.stock = int(val) if val not in (None, '') else None
+            if 'weight' in data:
+                val = data['weight'].strip()
+                variant.weight = Decimal(val) if val else None
+            if 'is_available' in data:
+                variant.is_available = bool(data['is_available'])
+            
+            variant.save()
+            return JsonResponse({'success': True, 'variant_id': variant.id})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+
+@staff_required
+class DeleteVariantView(View):
+    """
+    POST /myadmin/variants/<pk>/delete/
+    Deletes a variant.
+    """
+    def post(self, request, pk):
+        variant = get_object_or_404(ProductVariant, pk=pk)
+        try:
+            variant.delete()
+            return JsonResponse({'success': True, 'message': 'Variant deleted'})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ── Cache Invalidation Signals ─────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+
+@receiver([post_save, post_delete], sender=Product)
+def invalidate_product_cache(sender, instance, **kwargs):
+    """Clear dashboard cache when product is saved or deleted"""
+    CacheManager.clear_all_dashboard_caches()
+
+
+@receiver([post_save, post_delete], sender=Order)
+def invalidate_order_cache(sender, instance, **kwargs):
+    """Clear dashboard cache when order is saved or deleted"""
+    CacheManager.clear_all_dashboard_caches()
+
+
+@receiver([post_save, post_delete], sender=OrderItem)
+def invalidate_order_item_cache(sender, instance, **kwargs):
+    """Clear dashboard cache when order item is saved or deleted"""
+    CacheManager.clear_all_dashboard_caches()
+
+
+@receiver([post_save, post_delete], sender=Promotion)
+def invalidate_promotion_cache(sender, instance, **kwargs):
+    """Clear dashboard cache when promotion is saved or deleted"""
+    CacheManager.clear_all_dashboard_caches()
