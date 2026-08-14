@@ -87,28 +87,11 @@ class ImageOptimizer:
     @staticmethod
     def generate_srcset(image_url, sizes=[400, 800, 1200]):
         """
-        Generate srcset string for responsive images
-        
-        Args:
-            image_url: Base image URL
-            sizes: List of widths to generate
-        
-        Returns:
-            srcset string
+        Generate srcset string for responsive images.
+        Returns the image URL as-is since we serve local media files.
         """
         if not image_url:
             return ""
-        
-        # For Cloudinary URLs, add transformation parameters
-        if 'cloudinary' in image_url:
-            srcset_parts = []
-            for size in sizes:
-                # Add Cloudinary transformation
-                transformed_url = image_url.replace('/upload/', f'/upload/w_{size},q_auto,f_auto/')
-                srcset_parts.append(f"{transformed_url} {size}w")
-            return ", ".join(srcset_parts)
-        
-        # For other URLs, return as-is
         return f"{image_url} 1x"
     
     @staticmethod
@@ -155,39 +138,6 @@ class ImageOptimizer:
             return img.size
         except:
             return (0, 0)
-
-
-def cloudinary_transform_url(url, width=None, height=None, quality='auto', format='auto'):
-    """
-    Add Cloudinary transformations to URL for on-the-fly optimization
-    
-    Args:
-        url: Cloudinary image URL
-        width: Target width
-        height: Target height
-        quality: Quality setting (auto, best, good, eco, low)
-        format: Format (auto, webp, jpg, png)
-    
-    Returns:
-        Transformed URL
-    """
-    if not url or 'cloudinary' not in url:
-        return url
-    
-    transformations = []
-    
-    if width:
-        transformations.append(f"w_{width}")
-    if height:
-        transformations.append(f"h_{height}")
-    
-    transformations.append(f"q_{quality}")
-    transformations.append(f"f_{format}")
-    
-    transform_string = ",".join(transformations)
-    
-    # Insert transformations into URL
-    return url.replace('/upload/', f'/upload/{transform_string}/')
 
 
 def get_optimized_image_html(image_url, alt_text, width=None, height=None, lazy=True, class_name=""):
